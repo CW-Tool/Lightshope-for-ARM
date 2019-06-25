@@ -63,6 +63,7 @@
 #include "Anticheat.h"
 #include "CreatureLinkingMgr.h"
 #include "InstanceStatistics.h"
+#include "MovementPacketSender.h"
 
 #include <math.h>
 #include <stdarg.h>
@@ -354,6 +355,7 @@ void Unit::Update(uint32 update_diff, uint32 p_time)
     if (isAlive())
         ModifyAuraState(AURA_STATE_HEALTHLESS_20_PERCENT, GetHealth() < GetMaxHealth() * 0.20f);
 
+    CheckPendingMovementChanges();
     UpdateSplineMovement(p_time);
     GetMotionMaster()->UpdateMotion(p_time);
     if (GetMotionMaster()->NeedsAsyncUpdate() && IsInWorld())
@@ -1612,37 +1614,37 @@ void Unit::CalculateSpellDamage(SpellNonMeleeDamage *damageInfo, int32 damage, S
     switch (spellInfo->DmgClass)
     {
         // Melee and Ranged Spells
-    case SPELL_DAMAGE_CLASS_RANGED:
-    case SPELL_DAMAGE_CLASS_MELEE:
-    {
-        //Calculate damage bonus
-        damage = MeleeDamageBonusDone(pVictim, damage, attackType, spellInfo, SPELL_DIRECT_DAMAGE, 1, spell);
-        damage = pVictim->MeleeDamageBonusTaken(this, damage, attackType, spellInfo, SPELL_DIRECT_DAMAGE, 1, spell);
-
-        // if crit add critical bonus
-        if (crit)
+        case SPELL_DAMAGE_CLASS_RANGED:
+        case SPELL_DAMAGE_CLASS_MELEE:
         {
-            damageInfo->HitInfo |= SPELL_HIT_TYPE_CRIT;
-            damage = SpellCriticalDamageBonus(spellInfo, damage, pVictim, spell);
-        }
-    }
-    break;
-    // Magical Attacks
-    case SPELL_DAMAGE_CLASS_NONE:
-    case SPELL_DAMAGE_CLASS_MAGIC:
-    {
-        // Calculate damage bonus
-        damage = SpellDamageBonusDone(pVictim, spellInfo, damage, SPELL_DIRECT_DAMAGE, 1, spell);
-        damage = pVictim->SpellDamageBonusTaken(this, spellInfo, damage, SPELL_DIRECT_DAMAGE, 1, spell);
+            //Calculate damage bonus
+            damage = MeleeDamageBonusDone(pVictim, damage, attackType, spellInfo, SPELL_DIRECT_DAMAGE, 1, spell);
+            damage = pVictim->MeleeDamageBonusTaken(this, damage, attackType, spellInfo, SPELL_DIRECT_DAMAGE, 1, spell);
 
-        // If crit add critical bonus
-        if (crit)
-        {
-            damageInfo->HitInfo |= SPELL_HIT_TYPE_CRIT;
-            damage = SpellCriticalDamageBonus(spellInfo, damage, pVictim, spell);
+            // if crit add critical bonus
+            if (crit)
+            {
+                damageInfo->HitInfo |= SPELL_HIT_TYPE_CRIT;
+                damage = SpellCriticalDamageBonus(spellInfo, damage, pVictim, spell);
+            }
+            break;
         }
-    }
-    break;
+        // Magical Attacks
+        case SPELL_DAMAGE_CLASS_NONE:
+        case SPELL_DAMAGE_CLASS_MAGIC:
+        {
+            // Calculate damage bonus
+            damage = SpellDamageBonusDone(pVictim, spellInfo, damage, SPELL_DIRECT_DAMAGE, 1, spell);
+            damage = pVictim->SpellDamageBonusTaken(this, spellInfo, damage, SPELL_DIRECT_DAMAGE, 1, spell);
+
+            // If crit add critical bonus
+            if (crit)
+            {
+                damageInfo->HitInfo |= SPELL_HIT_TYPE_CRIT;
+                damage = SpellCriticalDamageBonus(spellInfo, damage, pVictim, spell);
+            }
+            break;
+        }
     }
 
     // damage mitigation
@@ -1880,65 +1882,32 @@ void Unit::CalculateMeleeDamage(Unit *pVictim, uint32 damage, CalcDamageInfo *da
             damageInfo->HitInfo     |= HITINFO_GLANCING;
             damageInfo->TargetState  = VICTIMSTATE_NORMAL;
             damageInfo->procEx |= PROC_EX_NORMAL_HIT;
-            // int32 attackerWeaponSkill = GetWeaponSkillValue(damageInfo->attackType,pVictim);
-            // int32 victimDefenseSkill = pVictim->GetDefenseSkillValue(this);
-            int SkillDiff = 0;
-            SkillDiff = pVictim->GetDefenseSkillValue(this) - GetWeaponSkillValue(damageInfo->attackType, pVictim);
-            float reducePercent = 1.0f;
-            // (Youfie) Formule de calcul de la réduction de dégâts des érafles, influencée en pré-BC par le +skill au delà de [niveau du joueur * 5]
-            // Formule d'Athan retenue et supposée comme Blizz-like au regard des multiples sources et tests concordants
-            // float reducePercent = 1 - (5*(pow(2,(victimDefenseSkill/5) - (attackerWeaponSkill/5) - 1))/100);
-            // Après tentative d'implémentation "propre" de la formule et de nombreux échecs, mise en place de celle-ci après calcul manuel des différentes valeurs
-            // cf. http://nostalrius.org/forum/viewtopic.php?p=43964#p43964 pour infos et sources
-            if (SkillDiff >= 15)
-                reducePercent = 0.6500f;
-            if (SkillDiff <= 0)
-                reducePercent = 1;
-            switch (SkillDiff)
-            {
-                case 14 :
-                    reducePercent = 0.7018f;
-                    break;
-                case 13 :
-                    reducePercent = 0.7469f;
-                    break;
-                case 12 :
-                    reducePercent = 0.7860f;
-                    break;
-                case 11 :
-                    reducePercent = 0.8203f;
-                    break;
-                case 10 :
-                    reducePercent = 0.8500f;
-                    break;
-                case 9 :
-                    reducePercent = 0.8759f;
-                    break;
-                case 8 :
-                    reducePercent = 0.8984f;
-                    break;
-                case 7 :
-                    reducePercent = 0.9180f;
-                    break;
-                case 6 :
-                    reducePercent = 0.9351f;
-                    break;
-                case 5 :
-                    reducePercent = 0.9500f;
-                    break;
-                case 4 :
-                    reducePercent = 0.9629f;
-                    break;
-                case 3 :
-                    reducePercent = 0.9742f;
-                    break;
-                case 2 :
-                    reducePercent = 0.9840f;
-                    break;
-                case 1 :
-                    reducePercent = 0.9926f;
-                    break;
+
+            // Baeza formula: https://wowwiki.fandom.com/wiki/Weapon_skill?diff=349241&oldid=347613
+            // Low end : 1.3 - 0.05*(defense - skill) min of 0.01 and max of 0.91
+            // If the attacker is a caster then this is reduced by 0.7 and max of 0.6
+            // High end : 1.2 - 0.03*(defense - skill) min of 0.2 and max of 0.99
+            // If the attacker is a caster then this is reduced by 0.3
+
+            int32 skillDiff = pVictim->GetDefenseSkillValue(this) - GetWeaponSkillValue(damageInfo->attackType, pVictim);
+            float low = 1.3f - 0.05f * skillDiff;
+            float high = 1.2f - 0.03f * skillDiff;
+            float lowCap = 0.91f;
+            float highCap = 0.99f;
+
+            if ((getClassMask() & CLASSMASK_WAND_USERS) != 0) {
+                low -= 0.7f;
+                high -= 0.3f;
+                lowCap = 0.6f;
             }
+
+            if (low < 0.01f) low = 0.01f;
+            if (high < 0.2f) high = 0.2f;
+
+            if (low > lowCap) low = lowCap;
+            if (high > highCap) high = highCap;
+
+            float reducePercent = frand(low,high);
 
             // sLog.outString("SkillDiff = %i, reducePercent = %f", SkillDiff, reducePercent); // Pour tests & débug via la console
 
@@ -2473,7 +2442,7 @@ void Unit::CalculateAbsorbResistBlock(Unit *pCaster, SpellNonMeleeDamage *damage
         // Melee and Ranged Spells
         case SPELL_DAMAGE_CLASS_RANGED:
         case SPELL_DAMAGE_CLASS_MELEE:
-            blocked = IsSpellBlocked(pCaster, spellProto, attType);
+            blocked = IsSpellBlocked(pCaster, this, spellProto, attType);
             break;
         default:
             break;
@@ -2590,9 +2559,13 @@ MeleeHitOutcome Unit::RollMeleeOutcomeAgainst(const Unit *pVictim, WeaponAttackT
     int32 victimDefenseSkill = pVictim->GetDefenseSkillValue(this);
 
     // bonus from skills is 0.04%
-    int32    skillBonus  = 4 * (attackerWeaponSkill - victimMaxSkillValueForLevel);
+    int32    skillDiff = attackerWeaponSkill - victimMaxSkillValueForLevel;
+    int32    cappedSkillDiff = std::min(attackerMaxSkillValueForLevel, attackerWeaponSkill) - victimMaxSkillValueForLevel;
+    int32    blockSkillBonus = pVictim->IsPlayer() ? 4 * skillDiff : 10 * skillDiff;
+    int32    dodgeSkillBonus = pVictim->IsPlayer() ? 4 * skillDiff : 10 * skillDiff;
+    int32    parrySkillBonus = pVictim->IsPlayer() ? 4 * skillDiff : cappedSkillDiff < -10 ? 60 * cappedSkillDiff : 20 * cappedSkillDiff;
     int32    sum = 0, tmp = 0;
-    int32    roll = urand(0, 10000);
+    int32    roll = urand(0, 9999);
 
     //DEBUG_FILTER_LOG(LOG_FILTER_COMBAT, "RollMeleeOutcomeAgainst: skill bonus of %d for attacker", skillBonus);
     //DEBUG_FILTER_LOG(LOG_FILTER_COMBAT, "RollMeleeOutcomeAgainst: rolled %d, miss %d, dodge %d, parry %d, block %d, crit %d", roll, miss_chance, dodge_chance, parry_chance, block_chance, crit_chance);
@@ -2622,10 +2595,14 @@ MeleeHitOutcome Unit::RollMeleeOutcomeAgainst(const Unit *pVictim, WeaponAttackT
     // only players can't dodge if attacker is behind
     if (pVictim->GetTypeId() != TYPEID_PLAYER || !from_behind)
     {
-        tmp = dodge_chance;
-        if ((tmp > 0)                                           // check if unit _can_ dodge
-                && ((tmp -= skillBonus) > 0)
-                && roll < (sum += tmp))
+        dodge_chance -= dodgeSkillBonus;
+
+        // Low level reduction
+        if (!pVictim->IsPlayer() && pVictim->getLevel() < 10)
+            dodge_chance *= pVictim->getLevel() / 10.0f;
+
+        if (dodge_chance > 0 &&                         // check if unit _can_ dodge
+            (roll < (sum += dodge_chance)))
         {
             DEBUG_FILTER_LOG(LOG_FILTER_COMBAT, "RollMeleeOutcomeAgainst: DODGE <%d, %d)", sum - tmp, sum);
             return MELEE_HIT_DODGE;
@@ -2638,7 +2615,11 @@ MeleeHitOutcome Unit::RollMeleeOutcomeAgainst(const Unit *pVictim, WeaponAttackT
     {
         if (parry_chance > 0 && (pVictim->GetTypeId() == TYPEID_PLAYER || !(((Creature*)pVictim)->GetCreatureInfo()->flags_extra & CREATURE_FLAG_EXTRA_NO_PARRY)))
         {
-            parry_chance -= skillBonus;
+            parry_chance -= parrySkillBonus;
+
+            // Low level reduction
+            if (!pVictim->IsPlayer() && pVictim->getLevel() < 10)
+                parry_chance *= pVictim->getLevel() / 10.0f;
 
             if (parry_chance > 0 &&                         // check if unit _can_ parry
                     (roll < (sum += parry_chance)))
@@ -2684,10 +2665,17 @@ MeleeHitOutcome Unit::RollMeleeOutcomeAgainst(const Unit *pVictim, WeaponAttackT
         if ((pVictim->GetTypeId() == TYPEID_PLAYER || !(((Creature*)pVictim)->GetCreatureInfo()->flags_extra & CREATURE_FLAG_EXTRA_NO_BLOCK))
           && !(GetTypeId() == TYPEID_UNIT && GetMeleeDamageSchoolMask() != SPELL_SCHOOL_MASK_NORMAL))  // can't block elemental melee attacks from mobs
         {
-            tmp = block_chance;
-            if ((tmp > 0)                                       // check if unit _can_ block
-                    && ((tmp -= skillBonus) > 0)
-                    && (roll < (sum += tmp)))
+            block_chance -= blockSkillBonus;
+
+            // Cannot be more than 5%
+            if (block_chance > 500) block_chance = 500;
+
+            // Low level reduction
+            if (!pVictim->IsPlayer() && pVictim->getLevel() < 10)
+                block_chance *= pVictim->getLevel() / 10.0f;
+
+            if (block_chance > 0 &&                         // check if unit _can_ block
+                (roll < (sum += block_chance)))
             {
                 // Critical chance
                 tmp = crit_chance;
@@ -2850,7 +2838,7 @@ void Unit::SendMeleeAttackStop(Unit* victim)
     ((Creature*)victim)->AI().EnterEvadeMode(this);*/
 }
 
-bool Unit::IsSpellBlocked(Unit *pCaster, SpellEntry const *spellEntry, WeaponAttackType attackType)
+bool Unit::IsSpellBlocked(Unit *pCaster, Unit *pVictim, SpellEntry const *spellEntry, WeaponAttackType attackType)
 {
     if (!HasInArc(M_PI_F, pCaster))
         return false;
@@ -2870,9 +2858,18 @@ bool Unit::IsSpellBlocked(Unit *pCaster, SpellEntry const *spellEntry, WeaponAtt
     }
 
     float blockChance = GetUnitBlockChance();
-    blockChance += (int32(pCaster->GetWeaponSkillValue(attackType)) - int32(GetSkillMaxForLevel())) * 0.04f;
 
-    if ((IsPlayer() && ToPlayer()->HasOption(PLAYER_CHEAT_UNRANDOMIZE)) ||
+    int32 skillDiff = int32(pCaster->GetWeaponSkillValue(attackType)) - int32(GetSkillMaxForLevel());
+    blockChance -= pVictim->IsPlayer() ? skillDiff * 0.04f : skillDiff * 0.1f;
+
+    // Cannot be more than 5%
+    if (blockChance > 5) blockChance = 5.0f;
+
+    // Low level reduction
+    if (!pVictim->IsPlayer() && pVictim->getLevel() < 10)
+        blockChance *= pVictim->getLevel() / 10.0f;
+
+    if ((IsPlayer() && ToPlayer()->HasOption(PLAYER_CHEAT_UNRANDOMIZE)) || (blockChance < 0) ||
         (pCaster->IsPlayer() && pCaster->ToPlayer()->HasOption(PLAYER_CHEAT_UNRANDOMIZE)))
         blockChance = 0;
     return roll_chance_f(blockChance);
@@ -2880,21 +2877,42 @@ bool Unit::IsSpellBlocked(Unit *pCaster, SpellEntry const *spellEntry, WeaponAtt
 
 // Melee based spells can be miss, parry or dodge on this step
 // Crit or block - determined on damage calculation phase! (and can be both in some time)
-float Unit::MeleeSpellMissChance(Unit *pVictim, WeaponAttackType attType, int32 skillDiff, SpellEntry const *spell, Spell* spellPtr)
+float Unit::MeleeSpellMissChance(Unit* pVictim, WeaponAttackType attType, int32 skillDiff, SpellEntry const* spell, Spell* spellPtr)
 {
     if (!pVictim || !pVictim->IsStandingUp())
         return 0.0f;
 
     // Calculate hit chance (more correct for chance mod)
     float hitChance = 0.0f;
+    float missChance = 0.0f;
 
     // PvP - PvE melee chances
     if (pVictim->GetTypeId() == TYPEID_PLAYER)
-        hitChance = 95.0f + skillDiff * 0.04f;
+        missChance = 5.0f - skillDiff * 0.04f;
     else if (skillDiff < -10)
-        hitChance = 93.0f + (skillDiff + 10) * 0.4f;        // 7% base chance to miss for big skill diff
+        missChance = 5.0f - skillDiff * 0.2f;
     else
-        hitChance = 95.0f + skillDiff * 0.1f;
+        missChance = 5.0f - skillDiff * 0.1f;
+
+    // Low level reduction
+    if (!pVictim->IsPlayer() && pVictim->getLevel() < 10)
+        missChance *= pVictim->getLevel() / 10.0f;
+
+    // Spellmod from SPELLMOD_RESIST_MISS_CHANCE
+    if (Player * modOwner = GetSpellModOwner())
+        modOwner->ApplySpellMod(spell->Id, SPELLMOD_RESIST_MISS_CHANCE, hitChance, spellPtr);
+
+    // Bonuses from attacker aura and ratings
+    if (attType == RANGED_ATTACK)
+        hitChance += m_modRangedHitChance;
+    else
+        hitChance += m_modMeleeHitChance;
+
+    // There is some code in 1.12 that explicitly adds a modifier that causes the first 1% of +hit gained from
+    // talents or gear to be ignored against monsters with more than 10 Defense Skill above the attacking player’s Weapon Skill.
+    // https://us.forums.blizzard.com/en/wow/t/bug-hit-tables/185675/33
+    if (skillDiff < -10 && hitChance > 0)
+        hitChance -= 1.0f;
 
     // Hit chance depends from victim auras
     if (attType == RANGED_ATTACK)
@@ -2902,18 +2920,7 @@ float Unit::MeleeSpellMissChance(Unit *pVictim, WeaponAttackType attType, int32 
     else
         hitChance += pVictim->GetTotalAuraModifier(SPELL_AURA_MOD_ATTACKER_MELEE_HIT_CHANCE);
 
-    // Spellmod from SPELLMOD_RESIST_MISS_CHANCE
-    if (Player *modOwner = GetSpellModOwner())
-        modOwner->ApplySpellMod(spell->Id, SPELLMOD_RESIST_MISS_CHANCE, hitChance, spellPtr);
-
-    // Miss = 100 - hit
-    float missChance = 100.0f - hitChance;
-
-    // Bonuses from attacker aura and ratings
-    if (attType == RANGED_ATTACK)
-        missChance -= m_modRangedHitChance;
-    else
-        missChance -= m_modMeleeHitChance;
+    missChance -= hitChance;
 
     // Limit miss chance from 0 to 60%
     if (missChance < 0.0f)
@@ -2924,7 +2931,7 @@ float Unit::MeleeSpellMissChance(Unit *pVictim, WeaponAttackType attType, int32 
 }
 
 // Melee based spells hit result calculations
-SpellMissInfo Unit::MeleeSpellHitResult(Unit *pVictim, SpellEntry const *spell, Spell* spellPtr)
+SpellMissInfo Unit::MeleeSpellHitResult(Unit* pVictim, SpellEntry const* spell, Spell* spellPtr)
 {
     WeaponAttackType attType = BASE_ATTACK;
 
@@ -2939,8 +2946,10 @@ SpellMissInfo Unit::MeleeSpellHitResult(Unit *pVictim, SpellEntry const *spell, 
     int32 attackerWeaponSkill = (spell->EquippedItemClass == ITEM_CLASS_WEAPON) ? int32(GetWeaponSkillValue(attType, pVictim)) : GetSkillMaxForLevel();
     int32 skillDiff = attackerWeaponSkill - int32(pVictim->GetSkillMaxForLevel(this));
     int32 fullSkillDiff = attackerWeaponSkill - int32(pVictim->GetDefenseSkillValue(this));
+    int32 minWeaponSkill = GetSkillMaxForLevel(pVictim) < attackerWeaponSkill ? GetSkillMaxForLevel(pVictim) : attackerWeaponSkill;
+    int32 cappedSkillDiff = minWeaponSkill - pVictim->GetSkillMaxForLevel(this);
 
-    uint32 roll = urand(0, 10000);
+    uint32 roll = urand(0, 9999);
 
     uint32 missChance = uint32(MeleeSpellMissChance(pVictim, attType, fullSkillDiff, spell, spellPtr) * 100.0f);
     // Roll miss
@@ -2997,11 +3006,15 @@ SpellMissInfo Unit::MeleeSpellHitResult(Unit *pVictim, SpellEntry const *spell, 
     if (canDodge)
     {
         // Roll dodge
-        int32 dodgeChance = int32(pVictim->GetUnitDodgeChance() * 100.0f) - skillDiff * 4;
+        int32 dodgeModifier = pVictim->IsPlayer() ? skillDiff * 4 : skillDiff * 10;
+        int32 dodgeChance = int32(pVictim->GetUnitDodgeChance() * 100.0f) - dodgeModifier;
 
         if (dodgeChance < 0)
             dodgeChance = 0;
 
+        // Low level reduction
+        if (!pVictim->IsPlayer() && pVictim->getLevel() < 10)
+            dodgeChance *= pVictim->getLevel() / 10.0f;
 
         tmp += dodgeChance;
         if (roll < tmp)
@@ -3011,10 +3024,16 @@ SpellMissInfo Unit::MeleeSpellHitResult(Unit *pVictim, SpellEntry const *spell, 
     if (canParry)
     {
         // Roll parry
-        int32 parryChance = int32(pVictim->GetUnitParryChance() * 100.0f)  - skillDiff * 4;
+        int32 parryModifier = pVictim->IsPlayer() ? skillDiff * 4 : cappedSkillDiff < -10 ? 60 * cappedSkillDiff : 20 * cappedSkillDiff;
+        int32 parryChance = int32(pVictim->GetUnitParryChance() * 100.0f) - parryModifier;
+
         // Can`t parry from behind
         if (parryChance < 0)
             parryChance = 0;
+
+        // Low level reduction
+        if (!pVictim->IsPlayer() && pVictim->getLevel() < 10)
+            parryChance *= pVictim->getLevel() / 10.0f;
 
         tmp += parryChance;
         if (roll < tmp)
@@ -3024,7 +3043,7 @@ SpellMissInfo Unit::MeleeSpellHitResult(Unit *pVictim, SpellEntry const *spell, 
     return SPELL_MISS_NONE;
 }
 
-SpellMissInfo Unit::MagicSpellHitResult(Unit *pVictim, SpellEntry const *spell, Spell* spellPtr)
+SpellMissInfo Unit::MagicSpellHitResult(Unit* pVictim, SpellEntry const* spell, Spell* spellPtr)
 {
     // Can`t miss on dead target (on skinning for example)
     if (!pVictim->isAlive())
@@ -3048,7 +3067,7 @@ SpellMissInfo Unit::MagicSpellHitResult(Unit *pVictim, SpellEntry const *spell, 
     return SPELL_MISS_NONE;
 }
 
-float Unit::RollMagicResistanceMultiplierOutcomeAgainst(const Unit *pCaster, SpellSchoolMask schoolMask, DamageEffectType damagetype, SpellEntry const* spellProto) const
+float Unit::RollMagicResistanceMultiplierOutcomeAgainst(const Unit* pCaster, SpellSchoolMask schoolMask, DamageEffectType damagetype, SpellEntry const* spellProto) const
 {
     float resistanceChance = pCaster->GetSpellResistChance(this, schoolMask, true);
 
@@ -3156,7 +3175,7 @@ float Unit::GetSpellResistChance(Unit const* victim, uint32 schoolMask, bool inn
     return resistModHitChance;
 }
 
-int32 Unit::MagicSpellHitChance(Unit *pVictim, SpellEntry const *spell, Spell* spellPtr)
+int32 Unit::MagicSpellHitChance(Unit* pVictim, SpellEntry const* spell, Spell* spellPtr)
 {
     if (spell->AttributesEx3 & SPELL_ATTR_EX3_CANT_MISS)
         return 10000;
@@ -3176,7 +3195,7 @@ int32 Unit::MagicSpellHitChance(Unit *pVictim, SpellEntry const *spell, Spell* s
     DEBUG_UNIT(this, DEBUG_SPELL_COMPUTE_RESISTS, "%s [%u] : Binary [%s]. Base hit chance %f, level diff: %d", spell->SpellName[2].c_str(), spell->Id, spell->IsBinary() ? "YES" : "NO", modHitChance, leveldif);
 
     // Spellmod from SPELLMOD_RESIST_MISS_CHANCE
-    if (Player *modOwner = GetSpellModOwner())
+    if (Player * modOwner = GetSpellModOwner())
     {
         modOwner->ApplySpellMod(spell->Id, SPELLMOD_RESIST_MISS_CHANCE, modHitChance, spellPtr);
         DEBUG_UNIT(this, DEBUG_SPELL_COMPUTE_RESISTS, "SPELLMOD_RESIST_MISS_CHANCE : %f", modHitChance);
@@ -3218,7 +3237,7 @@ int32 Unit::MagicSpellHitChance(Unit *pVictim, SpellEntry const *spell, Spell* s
     }
 
     int32 HitChance = modHitChance * 100;
-    if (HitChance <  100) HitChance =  100;
+    if (HitChance < 100) HitChance = 100;
     if (HitChance > 9900) HitChance = 9900;
     return HitChance;
 }
@@ -3230,7 +3249,7 @@ int32 Unit::MagicSpellHitChance(Unit *pVictim, SpellEntry const *spell, Spell* s
 //   Parry
 // For spells
 //   Resist
-SpellMissInfo Unit::SpellHitResult(Unit *pVictim, SpellEntry const *spell, SpellEffectIndex effIndex, bool CanReflect, Spell* spellPtr)
+SpellMissInfo Unit::SpellHitResult(Unit* pVictim, SpellEntry const* spell, SpellEffectIndex effIndex, bool CanReflect, Spell* spellPtr)
 {
     // Return evade for units in evade mode
     if (pVictim->GetTypeId() == TYPEID_UNIT && ((Creature*)pVictim)->IsInEvadeMode())
@@ -3298,7 +3317,7 @@ bool Unit::IsEffectResist(SpellEntry const* spell, int eff)
     return false;
 }
 
-float Unit::MeleeMissChanceCalc(const Unit *pVictim, WeaponAttackType attType) const
+float Unit::MeleeMissChanceCalc(const Unit* pVictim, WeaponAttackType attType) const
 {
     if (!pVictim || !pVictim->IsStandingUp())
         return 0.0f;
@@ -3328,15 +3347,28 @@ float Unit::MeleeMissChanceCalc(const Unit *pVictim, WeaponAttackType attType) c
     if (pVictim->GetTypeId() == TYPEID_PLAYER)
         missChance -= skillDiff * 0.04f;
     else if (skillDiff < -10)
-        missChance -= (skillDiff + 10) * 0.4f - 2.0f;       // 7% base chance to miss for big skill diff
+        missChance -= skillDiff * 0.2f;
     else
         missChance -= skillDiff * 0.1f;
 
+    // Low level reduction
+    if (!pVictim->IsPlayer() && pVictim->getLevel() < 10)
+        missChance *= pVictim->getLevel() / 10.0f;
+
     // Hit chance bonus from attacker based on ratings and auras
+    float hitChance = 0.0f;
     if (attType == RANGED_ATTACK)
-        missChance -= m_modRangedHitChance;
+        hitChance = m_modRangedHitChance;
     else
-        missChance -= m_modMeleeHitChance;
+        hitChance = m_modMeleeHitChance;
+
+    // There is some code in 1.12 that explicitly adds a modifier that causes the first 1% of +hit gained from
+    // talents or gear to be ignored against monsters with more than 10 Defense Skill above the attacking player’s Weapon Skill.
+    // https://us.forums.blizzard.com/en/wow/t/bug-hit-tables/185675/33
+    if (skillDiff < -10 && hitChance > 0)
+        hitChance -= 1.0f;
+
+    missChance -= hitChance;
 
     // Modify miss chance by victim auras
     if (attType == RANGED_ATTACK)
@@ -3359,8 +3391,8 @@ uint32 Unit::GetDefenseSkillValue(Unit const* target) const
     {
         // in PvP use full skill instead current skill value
         uint32 value = (target && target->GetTypeId() == TYPEID_PLAYER)
-                       ? ((Player*)this)->GetSkillMax(SKILL_DEFENSE)
-                       : ((Player*)this)->GetSkillValue(SKILL_DEFENSE);
+            ? ((Player*)this)->GetSkillMax(SKILL_DEFENSE)
+            : ((Player*)this)->GetSkillValue(SKILL_DEFENSE);
         return value;
     }
     else
@@ -3398,7 +3430,7 @@ float Unit::GetUnitParryChance() const
         Player const* player = (Player const*)this;
         if (player->CanParry())
         {
-            Item *tmpitem = player->GetWeaponForAttack(BASE_ATTACK, true, true);
+            Item* tmpitem = player->GetWeaponForAttack(BASE_ATTACK, true, true);
             if (!tmpitem)
                 tmpitem = player->GetWeaponForAttack(OFF_ATTACK, true, true);
 
@@ -3430,7 +3462,7 @@ float Unit::GetUnitBlockChance() const
         Player const* player = (Player const*)this;
         if (player->CanBlock() && player->CanUseEquippedWeapon(OFF_ATTACK))
         {
-            Item *tmpitem = player->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_OFFHAND);
+            Item* tmpitem = player->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_OFFHAND);
             if (tmpitem && !tmpitem->IsBroken() && tmpitem->GetProto()->Block)
                 return GetFloatValue(PLAYER_BLOCK_PERCENTAGE);
         }
@@ -3450,7 +3482,7 @@ float Unit::GetUnitBlockChance() const
     }
 }
 
-float Unit::GetUnitCriticalChance(WeaponAttackType attackType, const Unit *pVictim) const
+float Unit::GetUnitCriticalChance(WeaponAttackType attackType, const Unit* pVictim) const
 {
     float crit;
 
@@ -3465,7 +3497,7 @@ float Unit::GetUnitCriticalChance(WeaponAttackType attackType, const Unit *pVict
             case RANGED_ATTACK:
                 crit = GetFloatValue(PLAYER_RANGED_CRIT_PERCENTAGE);
                 break;
-            // Just for good manner
+                // Just for good manner
             default:
                 crit = 0.0f;
                 break;
@@ -3484,7 +3516,11 @@ float Unit::GetUnitCriticalChance(WeaponAttackType attackType, const Unit *pVict
         crit += pVictim->GetTotalAuraModifier(SPELL_AURA_MOD_ATTACKER_MELEE_CRIT_CHANCE);
 
     // Apply crit chance from defence skill
-    crit += (int32(GetSkillMaxForLevel(pVictim)) - int32(pVictim->GetDefenseSkillValue(this))) * 0.04f;
+    int32 skillDiff = int32(GetWeaponSkillValue(attackType, pVictim)) - int32(pVictim->GetDefenseSkillValue(this));
+    int32 minSkillValue = GetSkillMaxForLevel(pVictim) < GetWeaponSkillValue(attackType, pVictim) ? GetSkillMaxForLevel(pVictim) : GetWeaponSkillValue(attackType, pVictim);
+    int32 cappedSkillDiff = minSkillValue - pVictim->GetDefenseSkillValue(this);
+
+    crit += (pVictim->IsPlayer() || skillDiff > 0) ? skillDiff * 0.04f : cappedSkillDiff * 0.2f;
 
     if (crit < 0.0f)
         crit = 0.0f;
@@ -6092,7 +6128,7 @@ void Unit::ModifyAuraState(AuraState flag, bool apply)
                     case AURA_STATE_HEALTHLESS_15_PERCENT:
                     case AURA_STATE_HEALTHLESS_10_PERCENT:
                     case AURA_STATE_HEALTHLESS_5_PERCENT:
-                        UpdateSpeed(MOVE_RUN, true);
+                        UpdateSpeed(MOVE_RUN, false);
                         break;
                 }
             }
@@ -6127,7 +6163,7 @@ void Unit::ModifyAuraState(AuraState flag, bool apply)
                     case AURA_STATE_HEALTHLESS_15_PERCENT:
                     case AURA_STATE_HEALTHLESS_10_PERCENT:
                     case AURA_STATE_HEALTHLESS_5_PERCENT:
-                        UpdateSpeed(MOVE_RUN, true);
+                        UpdateSpeed(MOVE_RUN, false);
                         break;
                 }
             }
@@ -6146,6 +6182,15 @@ Unit *Unit::GetCharmer() const
 {
     if (ObjectGuid charmerid = GetCharmerGuid())
         return ObjectAccessor::GetUnit(*this, charmerid);
+    return nullptr;
+}
+
+Player* Unit::GetPossessor() const
+{
+    if (ObjectGuid possessor = GetPossessorGuid())
+        if (possessor.IsPlayer())
+            return ObjectAccessor::FindPlayer(possessor);
+
     return nullptr;
 }
 
@@ -8141,6 +8186,272 @@ bool Unit::canDetectStealthOf(Unit const* target, float distance, bool *alert) c
     return true;
 }
 
+void Unit::CheckPendingMovementChanges()
+{
+    if (!HasPendingMovementChange())
+        return;
+
+    Player* pController = GetPlayerMovingMe();
+    if (!pController || !pController->IsInWorld() || pController->IsBeingTeleportedFar())
+    {
+        ResolvePendingMovementChanges();
+        if (pController != this)
+            SendHeartBeat(true);
+        return;
+    }
+
+    PlayerMovementPendingChange& oldestChangeToAck = GetPendingMovementChangesQueue().front();
+    if (WorldTimer::getMSTime() > oldestChangeToAck.time + sWorld.getConfig(CONFIG_UINT32_MOVEMENT_CHANGE_ACK_TIME))
+    {
+        // There is a new change for the same thing, don't resend old state.
+        if (oldestChangeToAck.movementCounter < GetLastCounterForMovementChangeType(oldestChangeToAck.movementChangeType))
+        {
+            PopPendingMovementChange();
+            return;
+        }
+
+        // Not resendable change.
+        if (oldestChangeToAck.movementChangeType == INVALID || oldestChangeToAck.movementChangeType == KNOCK_BACK)
+        {
+            pController->GetCheatData()->OnFailedToAckChange();
+            PopPendingMovementChange();
+            return;
+        }
+
+        // Previous controller didn't ack a movement change. Not our fault.
+        if (oldestChangeToAck.controller != pController->GetObjectGuid())
+        {
+            ResolvePendingMovementChange(oldestChangeToAck);
+            PopPendingMovementChange();
+            SendHeartBeat(true);
+            return;
+        }
+
+        if (oldestChangeToAck.resent)
+        {
+            // Change was resent but still no reply. Enforce the flags.
+            pController->GetCheatData()->OnFailedToAckChange();
+            ResolvePendingMovementChange(oldestChangeToAck);
+            PopPendingMovementChange();
+            SendHeartBeat(true);
+        }
+        else
+        {
+            // Send the change a second time and wait for reply.
+            oldestChangeToAck.resent = true;
+            oldestChangeToAck.time = WorldTimer::getMSTime();
+
+            if (oldestChangeToAck.movementCounter < GetMovementCounter())
+                oldestChangeToAck.movementCounter = GetMovementCounterAndInc();
+
+            switch (oldestChangeToAck.movementChangeType)
+            {
+                case ROOT:
+                case WATER_WALK:
+                case SET_HOVER:
+                case FEATHER_FALL:
+                    MovementPacketSender::SendMovementFlagChangeToController(this, pController, oldestChangeToAck);
+                    return;
+                case SPEED_CHANGE_WALK:
+                case SPEED_CHANGE_RUN:
+                case SPEED_CHANGE_RUN_BACK:
+                case SPEED_CHANGE_SWIM:
+                case SPEED_CHANGE_SWIM_BACK:
+                case RATE_CHANGE_TURN:
+                    MovementPacketSender::SendSpeedChangeToController(this, pController, oldestChangeToAck);
+                    return;
+            }
+        }
+    }
+}
+
+PlayerMovementPendingChange Unit::PopPendingMovementChange()
+{
+    PlayerMovementPendingChange result = m_pendingMovementChanges.front();
+    m_pendingMovementChanges.pop_front();
+    return result;
+}
+
+void Unit::PushPendingMovementChange(PlayerMovementPendingChange newChange)
+{
+    m_lastMovementChangeCounterPerType[newChange.movementChangeType] = newChange.movementCounter;
+    m_pendingMovementChanges.emplace_back(std::move(newChange));
+}
+
+bool Unit::HasPendingMovementChange(MovementChangeType changeType) const
+{
+    return std::find_if(m_pendingMovementChanges.begin(), m_pendingMovementChanges.end(),
+        [changeType](PlayerMovementPendingChange const& pendingChange)
+    {
+        return pendingChange.movementChangeType == changeType;
+    }) != m_pendingMovementChanges.end();
+}
+
+void Unit::ResolvePendingMovementChanges()
+{
+    while (!m_pendingMovementChanges.empty())
+    {
+        auto change = m_pendingMovementChanges.begin();
+        ResolvePendingMovementChange(*change);
+        m_pendingMovementChanges.erase(change);
+    }
+}
+
+void Unit::ResolvePendingMovementChange(PlayerMovementPendingChange& change)
+{
+    switch (change.movementChangeType)
+    {
+        case ROOT:
+            if (change.apply)
+                RemoveUnitMovementFlag(MOVEFLAG_MASK_MOVING);
+            SetRootedReal(change.apply);
+            break;
+        case WATER_WALK:
+            SetWaterWalkingReal(change.apply);
+            break;
+        case SET_HOVER:
+            SetHoverReal(change.apply);
+            break;
+        case FEATHER_FALL:
+            SetFeatherFallReal(change.apply);
+            break;
+        case SPEED_CHANGE_WALK:
+            SetSpeedRateReal(MOVE_WALK, change.newValue / baseMoveSpeed[MOVE_WALK]);
+            break;
+        case SPEED_CHANGE_RUN:
+            SetSpeedRateReal(MOVE_RUN, change.newValue / baseMoveSpeed[MOVE_RUN]);
+            break;
+        case SPEED_CHANGE_RUN_BACK:
+            SetSpeedRateReal(MOVE_RUN_BACK, change.newValue / baseMoveSpeed[MOVE_RUN_BACK]);
+            break;
+        case SPEED_CHANGE_SWIM:
+            SetSpeedRateReal(MOVE_SWIM, change.newValue / baseMoveSpeed[MOVE_SWIM]);
+            break;
+        case SPEED_CHANGE_SWIM_BACK:
+            SetSpeedRateReal(MOVE_SWIM_BACK, change.newValue / baseMoveSpeed[MOVE_SWIM_BACK]);
+            break;
+        case RATE_CHANGE_TURN:
+            SetSpeedRateReal(MOVE_TURN_RATE, change.newValue / baseMoveSpeed[MOVE_TURN_RATE]);
+            break;
+    }
+}
+
+bool Unit::FindPendingMovementFlagChange(uint32 movementCounter, bool applyReceived, MovementChangeType changeTypeReceived)
+{
+    for (auto pendingChange = m_pendingMovementChanges.begin(); pendingChange != m_pendingMovementChanges.end(); pendingChange++)
+    {
+
+#if SUPPORTED_CLIENT_BUILD <= CLIENT_BUILD_1_9_4
+        movementCounter = pendingChange->movementCounter;
+#endif
+
+        if (pendingChange->movementCounter != movementCounter || pendingChange->apply != applyReceived || pendingChange->movementChangeType != changeTypeReceived)
+            continue;
+
+        m_pendingMovementChanges.erase(pendingChange);
+        return true;
+    }
+
+    return false;
+}
+
+bool Unit::FindPendingMovementRootChange(uint32 movementCounter, bool applyReceived)
+{
+    for (auto pendingChange = m_pendingMovementChanges.begin(); pendingChange != m_pendingMovementChanges.end(); pendingChange++)
+    {
+
+#if SUPPORTED_CLIENT_BUILD <= CLIENT_BUILD_1_9_4
+        movementCounter = pendingChange->movementCounter;
+#endif
+
+        if (pendingChange->movementCounter != movementCounter || pendingChange->apply != applyReceived || pendingChange->movementChangeType != ROOT)
+            continue;
+
+        m_pendingMovementChanges.erase(pendingChange);
+        return true;
+    }
+
+    return false;
+}
+
+bool Unit::FindPendingMovementKnockbackChange(MovementInfo& movementInfo, uint32 movementCounter)
+{
+    for (auto pendingChange = m_pendingMovementChanges.begin(); pendingChange != m_pendingMovementChanges.end(); pendingChange++)
+    {
+
+#if SUPPORTED_CLIENT_BUILD <= CLIENT_BUILD_1_9_4
+        movementCounter = pendingChange->movementCounter;
+#endif
+
+        if (pendingChange->movementCounter != movementCounter || pendingChange->movementChangeType != KNOCK_BACK
+            || std::fabs(pendingChange->knockbackInfo.speedXY - movementInfo.jump.xyspeed) > 0.01f
+            || std::fabs(pendingChange->knockbackInfo.speedZ - movementInfo.jump.velocity) > 0.01f
+            || std::fabs(pendingChange->knockbackInfo.vcos - movementInfo.jump.cosAngle) > 0.01f
+            || std::fabs(pendingChange->knockbackInfo.vsin - movementInfo.jump.sinAngle) > 0.01f)
+            continue;
+
+        m_pendingMovementChanges.erase(pendingChange);
+        return true;
+    }
+
+    return false;
+}
+
+bool Unit::FindPendingMovementSpeedChange(float speedReceived, uint32 movementCounter, UnitMoveType moveType)
+{
+    for (auto pendingChange = m_pendingMovementChanges.begin(); pendingChange != m_pendingMovementChanges.end(); pendingChange++)
+    {
+        float speedSent = pendingChange->newValue;
+        UnitMoveType moveTypeSent;
+        switch (pendingChange->movementChangeType)
+        {
+            case SPEED_CHANGE_WALK:                 moveTypeSent = MOVE_WALK; break;
+            case SPEED_CHANGE_RUN:                  moveTypeSent = MOVE_RUN; break;
+            case SPEED_CHANGE_RUN_BACK:             moveTypeSent = MOVE_RUN_BACK; break;
+            case SPEED_CHANGE_SWIM:                 moveTypeSent = MOVE_SWIM; break;
+            case SPEED_CHANGE_SWIM_BACK:            moveTypeSent = MOVE_SWIM_BACK; break;
+            case RATE_CHANGE_TURN:                  moveTypeSent = MOVE_TURN_RATE; break;
+            default:
+                continue;
+        }
+
+#if SUPPORTED_CLIENT_BUILD <= CLIENT_BUILD_1_9_4
+        movementCounter = pendingChange->movementCounter;
+#endif
+
+        if (pendingChange->movementCounter != movementCounter || std::fabs(speedSent - speedReceived) > 0.01f || moveTypeSent != moveType)
+            continue;
+
+        m_pendingMovementChanges.erase(pendingChange);
+        return true;
+    }
+
+    return false;
+}
+
+Player* Unit::GetPlayerMovingMe()
+{
+    if (Player* pPossessor = GetPossessor())
+        if (pPossessor->GetCharmGuid() == GetObjectGuid())
+            return pPossessor;
+
+    return ToPlayer();
+}
+
+bool Unit::IsMovedByPlayer() const
+{
+    if (Player* pPossessor = GetPossessor())
+        if (pPossessor->GetCharmGuid() == GetObjectGuid())
+            return true;
+
+    return IsPlayer();
+}
+
+PlayerMovementPendingChange::PlayerMovementPendingChange()
+{
+    time = WorldTimer::getMSTime();
+}
+
 void Unit::UpdateSpeed(UnitMoveType mtype, bool forced, float ratio)
 {
     // not in combat pet have same speed as owner
@@ -8153,7 +8464,7 @@ void Unit::UpdateSpeed(UnitMoveType mtype, bool forced, float ratio)
                 case MOVE_RUN:
                 case MOVE_WALK:
                 case MOVE_SWIM:
-                    SetSpeedRate(mtype, owner->GetSpeedRate(mtype), forced);
+                    SetSpeedRate(mtype, owner->GetSpeedRate(mtype));
                     return;
                 default:
                     break;
@@ -8269,7 +8580,10 @@ void Unit::UpdateSpeed(UnitMoveType mtype, bool forced, float ratio)
         }
     }
 
-    SetSpeedRate(mtype, speed * ratio, forced);
+    if (forced)
+        SetSpeedRateReal(mtype, speed * ratio);
+    else
+        SetSpeedRate(mtype, speed * ratio);
 }
 
 float Unit::GetSpeed(UnitMoveType mtype) const
@@ -8322,63 +8636,155 @@ struct SetSpeedRateHelper
     bool forced;
 };
 
-void Unit::SetSpeedRate(UnitMoveType mtype, float rate, bool forced)
+void Unit::SetSpeedRate(UnitMoveType mtype, float rate)
 {
-    if (rate <= 0)
-        rate = 1.0f;
+    if (rate < 0)
+        rate = 0.0f;
 
     // Update speed only on change
-    if (m_speed_rate[mtype] != rate)
+    MovementChangeType changeType = MovementPacketSender::GetChangeTypeByMoveType(mtype);
+    if (m_speed_rate[mtype] == rate && !HasPendingMovementChange(changeType))
+        return;
+
+    if (IsMovedByPlayer() && IsInWorld())
+        MovementPacketSender::AddSpeedChangeToController(this, mtype, rate);
+    else if (IsMovedByPlayer() && !IsInWorld()) // (1)
+        SetSpeedRateReal(mtype, rate);
+    else // <=> if(!IsMovedByPlayer())
     {
-        m_speed_rate[mtype] = rate;
-
-        const uint16 SetSpeed2Opc_table[MAX_MOVE_TYPE][2] =
-        {
-            {MSG_MOVE_SET_WALK_SPEED,       SMSG_FORCE_WALK_SPEED_CHANGE},
-            {MSG_MOVE_SET_RUN_SPEED,        SMSG_FORCE_RUN_SPEED_CHANGE},
-            {MSG_MOVE_SET_RUN_BACK_SPEED,   SMSG_FORCE_RUN_BACK_SPEED_CHANGE},
-            {MSG_MOVE_SET_SWIM_SPEED,       SMSG_FORCE_SWIM_SPEED_CHANGE},
-            {MSG_MOVE_SET_SWIM_BACK_SPEED,  SMSG_FORCE_SWIM_BACK_SPEED_CHANGE},
-            {MSG_MOVE_SET_TURN_RATE,        SMSG_FORCE_TURN_RATE_CHANGE},
-        };
-
-        if (forced)
-        {
-            if (Player* me = GetAffectingPlayer())
-            {
-#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_9_4
-                WorldPacket dataForMe(SetSpeed2Opc_table[mtype][1], 18);
-                dataForMe << GetPackGUID();
-                dataForMe << uint32(0);
-#else
-                WorldPacket dataForMe(SetSpeed2Opc_table[mtype][1], 14);
-#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_8_4
-                dataForMe << GetPackGUID();
-#else
-                dataForMe << GetGUID();
-#endif
-#endif
-                dataForMe << float(GetSpeed(mtype));
-                me->GetSession()->SendPacket(&dataForMe);
-                me->GetCheatData()->OrderSent(&dataForMe);
-                //if (this == me)
-                    //if (WardenInterface* warden = me->GetSession()->GetWarden())
-                        //warden->SendSpeedChange(mtype, GetSpeed(mtype));
-            }
-        }
-
-
-        // TODO: Actually such opcodes should (always?) be packed with SMSG_COMPRESSED_MOVES
-        // Nostalrius: (google translated)
-        // Unable to send here the package 'MSG_MOVE_SET _ * _ SPEED', because we do not know the flags of movements, and the position dimension client
-        // (update every 0.5 sec). If one sends a packet, one leads to a desynchro (in the absence of interpolation of the position)
-        // This package will be sent after receiving a packet type 'CMSG_FORCE _ * _ SPEED_CHANGE_ACK' (MovementHandler.cpp)
-        //m_updateFlag |= UPDATEFLAG_LIVING; // Mise a jour des mouvements en cours, spline, vitesses, etc ... Inutile ?
-
-        propagateSpeedChange();
+        SetSpeedRateReal(mtype, rate);
+        MovementPacketSender::SendSpeedChangeToAll(this, mtype, rate);
     }
 
-    CallForAllControlledUnits(SetSpeedRateHelper(mtype, forced), CONTROLLED_PET | CONTROLLED_GUARDIANS | CONTROLLED_CHARM | CONTROLLED_MINIPET);
+    // explaination of (1):
+    // If the player is not in the world yet, it won't reply to the packets requiring an ack. And once the player is in the world, next time a movement 
+    // packet which requires an ack is sent to the client (change of speed for example), the client is kicked from the 
+    // server on the ground that it should have replied to the first packet first. That line is a hacky fix 
+    // in the sense that it doesn't work like that in retail since buffs are applied only after the player has been 
+    // initialized in the world. cf description of PR #18771
+}
+
+void Unit::SetSpeedRateReal(UnitMoveType mtype, float rate)
+{
+    m_speed_rate[mtype] = rate;
+    propagateSpeedChange();
+    CallForAllControlledUnits(SetSpeedRateHelper(mtype, true), CONTROLLED_PET | CONTROLLED_GUARDIANS | CONTROLLED_CHARM | CONTROLLED_MINIPET);
+}
+
+void Unit::SetRooted(bool apply)
+{
+    // do nothing if the unit is already in the required state
+    if (apply == HasUnitMovementFlag(MOVEFLAG_ROOT) && !HasPendingMovementChange(ROOT))
+        return;
+
+    if (apply)
+        StopMoving(); // @todo: this method needs a rework to work well with players.
+    
+    if (IsMovedByPlayer() && IsInWorld())
+        MovementPacketSender::AddMovementFlagChangeToController(this, MOVEFLAG_ROOT, apply);
+    else if (IsMovedByPlayer() && !IsInWorld())
+        SetRootedReal(apply);
+    else
+    {
+        SetRootedReal(apply);
+        MovementPacketSender::SendMovementFlagChangeToAll(this, MOVEFLAG_ROOT, apply);
+    }
+}
+
+void Unit::SetRootedReal(bool apply)
+{
+    if (apply)
+        AddUnitMovementFlag(MOVEFLAG_ROOT);
+    else
+        RemoveUnitMovementFlag(MOVEFLAG_ROOT);
+}
+
+void Unit::SetWaterWalking(bool apply)
+{
+    if (apply == HasUnitMovementFlag(MOVEFLAG_WATERWALKING) && !HasPendingMovementChange(WATER_WALK))
+        return;
+
+    if (IsMovedByPlayer() && IsInWorld())
+        MovementPacketSender::AddMovementFlagChangeToController(this, MOVEFLAG_WATERWALKING, apply);
+    else if (IsMovedByPlayer() && !IsInWorld())
+        SetWaterWalkingReal(apply);
+    else
+    {
+        SetWaterWalkingReal(apply);
+        MovementPacketSender::SendMovementFlagChangeToAll(this, MOVEFLAG_WATERWALKING, apply);
+    }
+}
+
+void Unit::SetWaterWalkingReal(bool apply)
+{
+    if (apply)
+        AddUnitMovementFlag(MOVEFLAG_WATERWALKING);
+    else
+        RemoveUnitMovementFlag(MOVEFLAG_WATERWALKING);
+}
+
+void Unit::SetFeatherFall(bool apply)
+{
+    if (apply == HasUnitMovementFlag(MOVEFLAG_SAFE_FALL) && !HasPendingMovementChange(FEATHER_FALL))
+        return;
+
+    if (IsMovedByPlayer() && IsInWorld())
+        MovementPacketSender::AddMovementFlagChangeToController(this, MOVEFLAG_SAFE_FALL, apply);
+    else if (IsMovedByPlayer() && !IsInWorld())
+        SetFeatherFallReal(apply);
+    else
+    {
+        SetFeatherFallReal(apply);
+        MovementPacketSender::SendMovementFlagChangeToAll(this, MOVEFLAG_SAFE_FALL, apply);
+    }
+}
+
+void Unit::SetFeatherFallReal(bool apply)
+{
+    if (apply)
+        AddUnitMovementFlag(MOVEFLAG_SAFE_FALL);
+    else
+        RemoveUnitMovementFlag(MOVEFLAG_SAFE_FALL);
+}
+
+void Unit::SetHover(bool apply)
+{
+    if (apply == HasUnitMovementFlag(MOVEFLAG_HOVER) && !HasPendingMovementChange(SET_HOVER))
+        return;
+
+    if (IsMovedByPlayer() && IsInWorld())
+        MovementPacketSender::AddMovementFlagChangeToController(this, MOVEFLAG_HOVER, apply);
+    else if (IsMovedByPlayer() && !IsInWorld())
+        SetHoverReal(apply);
+    else
+    {
+        SetHoverReal(apply);
+        MovementPacketSender::SendMovementFlagChangeToAll(this, MOVEFLAG_HOVER, apply);
+    }
+}
+
+void Unit::SetHoverReal(bool apply)
+{
+    if (apply)
+        AddUnitMovementFlag(MOVEFLAG_HOVER);
+    else
+        RemoveUnitMovementFlag(MOVEFLAG_HOVER);
+}
+
+void Unit::SetLevitate(bool enable)
+{
+    if (enable)
+        m_movementInfo.AddMovementFlag(MOVEFLAG_LEVITATING);
+    else
+        m_movementInfo.RemoveMovementFlag(MOVEFLAG_LEVITATING);
+}
+
+void Unit::SetFly(bool enable)
+{
+    if (enable)
+        m_movementInfo.AddMovementFlag(MOVEFLAG_FLYING | MOVEFLAG_CAN_FLY);
+    else
+        m_movementInfo.RemoveMovementFlag(MOVEFLAG_FLYING | MOVEFLAG_CAN_FLY);
 }
 
 void Unit::SetDeathState(DeathState s)
@@ -10226,7 +10632,7 @@ void Unit::UpdateModelData()
         {
             // Taurens have increased combat reach. Confirmed by Blizzard.
             // https://us.forums.blizzard.com/en/wow/t/wow-classic-not-a-bug-list/175887
-            if (getRace() == RACE_TAUREN)
+            if (getRace() == RACE_TAUREN && GetDisplayId() == GetNativeDisplayId())
                 SetFloatValue(UNIT_FIELD_COMBATREACH, 4.05f);
             else
                 SetFloatValue(UNIT_FIELD_COMBATREACH, 1.5f);
@@ -10798,6 +11204,9 @@ void Unit::SetPvP(bool state)
 
 void Unit::KnockBackFrom(WorldObject* target, float horizontalSpeed, float verticalSpeed)
 {
+    if (IsRooted())
+        return;
+
     float angle = this == target ? GetOrientation() + M_PI_F : target->GetAngle(this);
 
     // set immune anticheat and calculate speed
@@ -10812,27 +11221,20 @@ void Unit::KnockBackFrom(WorldObject* target, float horizontalSpeed, float verti
 
 void Unit::KnockBack(float angle, float horizontalSpeed, float verticalSpeed)
 {
+    if (IsRooted() || !movespline->Finalized())
+        return;
+
     InterruptNonMeleeSpells(false);
 
     // Effect properly implemented only for players
-    if (GetTypeId() == TYPEID_PLAYER)
+    if (IsMovedByPlayer() && IsInWorld())
     {
         float vsin = sin(angle);
         float vcos = cos(angle);
-        WorldPacket data(SMSG_MOVE_KNOCK_BACK, 8 + 4 + 4 + 4 + 4 + 4);
-#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_8_4
-        data << GetPackGUID();
-#else
-        data << GetGUID();
-#endif
-        data << uint32(0);                                  // Sequence
-        data << float(vcos);                                // x direction
-        data << float(vsin);                                // y direction
-        data << float(horizontalSpeed);                     // Horizontal speed
-        data << float(-verticalSpeed);                      // Z Movement speed (vertical)
-        SendMovementMessageToSet(std::move(data), true);
+        MovementPacketSender::SendKnockBackToController(this, vcos, vsin, horizontalSpeed, -verticalSpeed); // !! notice the - sign in front of speedZ !!
 
-        ToPlayer()->GetCheatData()->KnockBack(horizontalSpeed, verticalSpeed, vcos, vsin);
+        if (Player* pPlayer = ToPlayer())
+            GetPlayerMovingMe()->GetCheatData()->KnockBack(pPlayer, horizontalSpeed, verticalSpeed, vcos, vsin);
     }
 }
 
@@ -11663,46 +12065,6 @@ void Unit::SetWalk(bool enable, bool asDefault)
         SendObjectMessageToSet(&data, false);
 }
 
-void Unit::SetLevitate(bool enable)
-{
-    if (enable)
-        m_movementInfo.AddMovementFlag(MOVEFLAG_LEVITATING);
-    else
-        m_movementInfo.RemoveMovementFlag(MOVEFLAG_LEVITATING);
-}
-
-void Unit::SetFly(bool enable)
-{
-    if (enable)
-        m_movementInfo.AddMovementFlag(MOVEFLAG_FLYING | MOVEFLAG_CAN_FLY);
-    else
-        m_movementInfo.RemoveMovementFlag(MOVEFLAG_FLYING | MOVEFLAG_CAN_FLY);
-}
-
-void Unit::SetFeatherFall(bool enable)
-{
-    if (enable)
-        m_movementInfo.AddMovementFlag(MOVEFLAG_SAFE_FALL);
-    else
-        m_movementInfo.RemoveMovementFlag(MOVEFLAG_SAFE_FALL);
-}
-
-void Unit::SetHover(bool enable)
-{
-    if (enable)
-        m_movementInfo.AddMovementFlag(MOVEFLAG_HOVER);
-    else
-        m_movementInfo.RemoveMovementFlag(MOVEFLAG_HOVER);
-}
-
-void Unit::SetWaterWalk(bool enable)
-{
-    if (enable)
-        m_movementInfo.AddMovementFlag(MOVEFLAG_WATERWALKING);
-    else
-        m_movementInfo.RemoveMovementFlag(MOVEFLAG_WATERWALKING);
-}
-
 void Unit::DisableSpline()
 {
     if (Player* me = ToPlayer())
@@ -11824,126 +12186,6 @@ void Unit::RemoveAttackersThreat(Unit* owner)
         if (owner)
             (*itr)->AddThreat(owner, 1.0f);
     }
-}
-
-void Unit::SetMovement(UnitMovementType pType)
-{
-    switch (pType)
-    {
-        case MOVE_ROOT:
-            m_movementInfo.ChangePosition(GetPositionX(), GetPositionY(), GetPositionZ(), GetOrientation());
-            m_movementInfo.UpdateTime(WorldTimer::getMSTime());
-            m_movementInfo.moveFlags = MOVEFLAG_ROOT | (m_movementInfo.moveFlags & ~MOVEFLAG_MASK_MOVING_OR_TURN);
-            break;
-        case MOVE_UNROOT:
-            m_movementInfo.ChangePosition(GetPositionX(), GetPositionY(), GetPositionZ(), GetOrientation());
-            m_movementInfo.UpdateTime(WorldTimer::getMSTime());
-            m_movementInfo.moveFlags = (m_movementInfo.moveFlags & ~(MOVEFLAG_MASK_MOVING_OR_TURN | MOVEFLAG_ROOT));
-            break;
-    }
-    WorldPacket data;
-    if (!movespline->Finalized())
-    {
-        // Spline roots are sent here.
-        MovementData mvtData(this);
-        switch (pType)
-        {
-#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_8_4
-            case MOVE_ROOT:
-                mvtData.SetSplineOpcode(SMSG_SPLINE_MOVE_ROOT, GetObjectGuid());
-                return;
-            case MOVE_UNROOT:
-                mvtData.SetSplineOpcode(SMSG_SPLINE_MOVE_UNROOT, GetObjectGuid());
-                break;
-            case MOVE_WATER_WALK:
-                mvtData.SetSplineOpcode(SMSG_SPLINE_MOVE_WATER_WALK, GetObjectGuid());
-                break;
-            case MOVE_LAND_WALK:
-                mvtData.SetSplineOpcode(SMSG_SPLINE_MOVE_LAND_WALK, GetObjectGuid());
-                break;
-#else
-            case MOVE_ROOT:
-                mvtData.SetSplineOpcode(MSG_MOVE_ROOT, GetObjectGuid());
-                return;
-            case MOVE_UNROOT:
-                mvtData.SetSplineOpcode(MSG_MOVE_UNROOT, GetObjectGuid());
-                break;
-            case MOVE_WATER_WALK:
-                mvtData.SetSplineOpcode(SMSG_MOVE_WATER_WALK, GetObjectGuid());
-                break;
-            case MOVE_LAND_WALK:
-                mvtData.SetSplineOpcode(SMSG_MOVE_LAND_WALK, GetObjectGuid());
-                break;
-#endif
-        }
-        return;
-    }
-    // Inform controller
-    Player* mePlayer = ToPlayer();
-    Player* controller = nullptr;
-    if (Unit* charmer = GetCharmer())
-        if (Player* charmerPlayer = charmer->ToPlayer())
-            if (charmerPlayer->GetCharmGuid() == GetObjectGuid())
-                controller = charmerPlayer;
-    if (!mePlayer && !controller)
-        return;
-
-    switch (pType)
-    {
-#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_8_4
-        case MOVE_ROOT:
-            data.Initialize(SMSG_FORCE_MOVE_ROOT,   GetPackGUID().size() + 4);
-            break;
-        case MOVE_UNROOT:
-            data.Initialize(SMSG_FORCE_MOVE_UNROOT, GetPackGUID().size() + 4);
-            break;
-        case MOVE_WATER_WALK:
-            data.Initialize(SMSG_MOVE_WATER_WALK,   GetPackGUID().size() + 4);
-            break;
-        case MOVE_LAND_WALK:
-            data.Initialize(SMSG_MOVE_LAND_WALK,    GetPackGUID().size() + 4);
-            break;
-#else
-        case MOVE_ROOT:
-            data.Initialize(SMSG_FORCE_MOVE_ROOT,   8 + 4);
-            break;
-        case MOVE_UNROOT:
-            data.Initialize(SMSG_FORCE_MOVE_UNROOT, 8 + 4);
-            break;
-        case MOVE_WATER_WALK:
-            data.Initialize(SMSG_MOVE_WATER_WALK,   8 + 4);
-            break;
-        case MOVE_LAND_WALK:
-            data.Initialize(SMSG_MOVE_LAND_WALK,    8 + 4);
-            break;
-#endif
-        default:
-            sLog.outError("Player::SetMovement: Unsupported move type (%d), data not sent to client.", pType);
-            return;
-    }
-#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_8_4
-    data << GetPackGUID();
-#else
-    data << GetGUID();
-#endif
-    data << uint32(WorldTimer::getMSTime()); // Peut etre msTime : WorldTimer::getMSTime() ?
-    if (mePlayer)
-    {
-        mePlayer->GetCheatData()->OrderSent(&data);
-        mePlayer->GetSession()->SendPacket(&data);
-
-        // We can't send movement info here because it is out-of-date with the client
-        // and causes issues with unit speed updates on death/res
-        /*if (pType == MOVE_ROOT || pType == MOVE_UNROOT) {
-            WorldPacket rootData(pType == MOVE_ROOT ? MSG_MOVE_ROOT : MSG_MOVE_UNROOT, 31);
-            rootData << GetPackGUID();
-            rootData << m_movementInfo;
-
-            mePlayer->SendMovementMessageToSet(std::move(rootData), false);
-        }*/
-    }
-    if (controller)
-        controller->GetSession()->SendPacket(&data);
 }
 
 bool Unit::HasBreakableByDamageAuraType(AuraType type, uint32 excludeAura) const
@@ -12276,14 +12518,14 @@ void Unit::InitPlayerDisplayIds()
     switch (gender)
     {
         case GENDER_FEMALE:
-            SetDisplayId(info->displayId_f);
             SetNativeDisplayId(info->displayId_f);
+            SetDisplayId(info->displayId_f);
             if (getRace() == RACE_TAUREN)
                 setNativeScale(DEFAULT_TAUREN_FEMALE_SCALE);
             break;
         case GENDER_MALE:
-            SetDisplayId(info->displayId_m);
             SetNativeDisplayId(info->displayId_m);
+            SetDisplayId(info->displayId_m);
             if (getRace() == RACE_TAUREN)
                 setNativeScale(DEFAULT_TAUREN_MALE_SCALE);
             break;

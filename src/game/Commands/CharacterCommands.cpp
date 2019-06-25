@@ -73,10 +73,6 @@ bool ChatHandler::HandleXpCommand(char* args)
 
 bool ChatHandler::HandleGodCommand(char* args)
 {
-    Player *pPlayer = GetSelectedPlayer();
-    if (!pPlayer)
-        pPlayer = m_session->GetPlayer();
-
     if (*args)
     {
         bool value;
@@ -86,7 +82,12 @@ bool ChatHandler::HandleGodCommand(char* args)
             SetSentErrorMessage(true);
             return false;
         }
-        pPlayer->SetGodMode(value, true);
+        
+        Player* target;
+        if (!ExtractPlayerTarget(&args, &target))
+            return false;
+
+        target->SetGodMode(value, true);
     }
 
     return true;
@@ -4090,7 +4091,7 @@ bool ChatHandler::HandleModifySpeedCommand(char* args)
     if (needReportToTarget(chr))
         ChatHandler(chr).PSendSysMessage(LANG_YOURS_SPEED_CHANGED, GetNameLink().c_str(), modSpeed);
 
-    chr->UpdateSpeed(MOVE_RUN, true, modSpeed);
+    chr->UpdateSpeed(MOVE_RUN, false, modSpeed);
 
     return true;
 }
@@ -4152,7 +4153,7 @@ bool ChatHandler::HandleModifySwimCommand(char* args)
     if (needReportToTarget(chr))
         ChatHandler(chr).PSendSysMessage(LANG_YOURS_SWIM_SPEED_CHANGED, GetNameLink().c_str(), modSpeed);
 
-    chr->UpdateSpeed(MOVE_SWIM, true, modSpeed);
+    chr->UpdateSpeed(MOVE_SWIM, false, modSpeed);
 
     return true;
 }
@@ -4199,7 +4200,7 @@ bool ChatHandler::HandleModifyBWalkCommand(char* args)
     if (needReportToTarget(chr))
         ChatHandler(chr).PSendSysMessage(LANG_YOURS_BACK_SPEED_CHANGED, GetNameLink().c_str(), modSpeed);
 
-    chr->UpdateSpeed(MOVE_RUN_BACK, true, modSpeed);
+    chr->UpdateSpeed(MOVE_RUN_BACK, false, modSpeed);
 
     return true;
 }
@@ -5075,9 +5076,9 @@ bool ChatHandler::HandleWaterwalkCommand(char* args)
         return false;
 
     if (value)
-        player->SetMovement(MOVE_WATER_WALK);               // ON
+        player->SetWaterWalking(true);
     else
-        player->SetMovement(MOVE_LAND_WALK);                // OFF
+        player->SetWaterWalking(false);
 
     PSendSysMessage(LANG_YOU_SET_WATERWALK, args, GetNameLink(player).c_str());
     if (needReportToTarget(player))

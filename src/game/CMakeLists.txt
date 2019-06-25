@@ -180,6 +180,7 @@ set (game_SRCS
     Movement/IdleMovementGenerator.cpp
     Movement/MotionMaster.cpp
     Movement/MovementGenerator.cpp
+    Movement/MovementPacketSender.cpp
     Movement/PointMovementGenerator.cpp
     Movement/RandomMovementGenerator.cpp
     Movement/TargetedMovementGenerator.cpp
@@ -366,6 +367,7 @@ set (game_SRCS
     Movement/MotionMaster.h
     Movement/MovementGenerator.h
     Movement/MovementGeneratorImpl.h
+    Movement/MovementPacketSender.h
     Movement/PointMovementGenerator.h
     Movement/RandomMovementGenerator.h
     Movement/TargetedMovementGenerator.h
@@ -454,23 +456,17 @@ endif()
 
 if(USE_ANTICHEAT)
   list(APPEND game_SRCS
-      Anticheat/module/libanticheat.cpp
-      Anticheat/module/libanticheat.h
-      Anticheat/module/Antispam/Antispam.cpp
-      Anticheat/module/Antispam/Antispam.h
-      Anticheat/module/MovementAnticheat/Cheat.cpp
-      Anticheat/module/MovementAnticheat/Cheat.h
-      Anticheat/module/WardenAnticheat/Warden.cpp
-      Anticheat/module/WardenAnticheat/Warden.h
-      Anticheat/module/WardenAnticheat/WardenMac.cpp
-      Anticheat/module/WardenAnticheat/WardenMac.h
-      Anticheat/module/WardenAnticheat/WardenWin.cpp
-      Anticheat/module/WardenAnticheat/WardenWin.h
-      Anticheat/module/WardenAnticheat/WardenStorageMgr.cpp
-      Anticheat/module/WardenAnticheat/WardenStorageMgr.h
-      Anticheat/module/WardenAnticheat/WardenModuleMac.h
-      Anticheat/module/WardenAnticheat/WardenModuleWin.h
-      Anticheat/module/WardenAnticheat/WardenKeyGeneration.h
+      Anticheat/MovementAnticheat/MovementAnticheat.cpp
+      Anticheat/MovementAnticheat/MovementAnticheat.h
+      Anticheat/WardenAnticheat/Warden.cpp
+      Anticheat/WardenAnticheat/Warden.h
+      Anticheat/WardenAnticheat/WardenMac.cpp
+      Anticheat/WardenAnticheat/WardenMac.h
+      Anticheat/WardenAnticheat/WardenWin.cpp
+      Anticheat/WardenAnticheat/WardenWin.h
+      Anticheat/WardenAnticheat/WardenMgr.cpp
+      Anticheat/WardenAnticheat/WardenMgr.h
+      Anticheat/WardenAnticheat/WardenKeyGen.h
   )
 endif()
 
@@ -508,7 +504,6 @@ include_directories(
   ${CMAKE_CURRENT_SOURCE_DIR}/Threat
   ${CMAKE_CURRENT_SOURCE_DIR}/Transports
   ${CMAKE_CURRENT_SOURCE_DIR}/vmap
-  ${CMAKE_CURRENT_SOURCE_DIR}/Warden
   ${CMAKE_SOURCE_DIR}/src/scripts
   ${CMAKE_SOURCE_DIR}/src/scripts/PrecompiledHeaders
   ${CMAKE_SOURCE_DIR}/dep/include/g3dlite
@@ -523,6 +518,7 @@ include_directories(
   ${MYSQL_INCLUDE_DIR}
   ${TBB_INCLUDE_DIRS}
   ${ACE_INCLUDE_DIR}
+  ${OPENSSL_INCLUDE_DIR}
 )
 
 if(WIN32)

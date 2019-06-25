@@ -188,7 +188,7 @@ void TargetedMovementGeneratorMedium<T, D>::_setTargetLocation(T &owner)
         float allowed_dist = owner.GetCombatReach(false) + i_target->GetCombatReach(false) + 5.0f;
         G3D::Vector3 dest = owner.movespline->FinalDestination();
         if ((player->GetPositionZ() - allowed_dist - 5.0f) > dest.z)
-            player->GetCheatData()->Unreachable(&owner);
+            player->GetCheatData()->OnUnreachable(&owner);
     }
 }
 
@@ -326,7 +326,7 @@ bool ChaseMovementGenerator<T>::Update(T &owner, const uint32 & time_diff)
                     // Fly-hack
                     if (Player* player = i_target->ToPlayer())
                         if ((player->GetPositionZ() - allowed_dist - 5.0f) > dest.z)
-                            player->GetCheatData()->Unreachable(&owner);
+                            player->GetCheatData()->OnUnreachable(&owner);
                 }
             }
         }
@@ -657,9 +657,9 @@ void FollowMovementGenerator<Creature>::_updateSpeed(Creature &u)
     if (!i_target.isValid() || i_target->GetObjectGuid() != u.GetOwnerGuid())
         return;
 
-    u.UpdateSpeed(MOVE_RUN, true);
-    u.UpdateSpeed(MOVE_WALK, true);
-    u.UpdateSpeed(MOVE_SWIM, true);
+    u.UpdateSpeed(MOVE_RUN, false);
+    u.UpdateSpeed(MOVE_WALK, false);
+    u.UpdateSpeed(MOVE_SWIM, false);
 }
 
 template<>
