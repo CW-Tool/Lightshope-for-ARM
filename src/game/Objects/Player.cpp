@@ -1187,7 +1187,7 @@ void Player::Update(uint32 update_diff, uint32 p_time)
         UpdateMeleeAttackingState();
 
         Unit const* pVictim = getVictim();
-        if (pVictim && !IsNonMeleeSpellCasted(false) && CanReachWithMeleeAttack(pVictim))
+        if (pVictim && !IsNonMeleeSpellCasted(false) && CanReachWithMeleeAutoAttack(pVictim))
             TogglePlayerPvPFlagOnAttackVictim(pVictim);
     }
 
@@ -4376,9 +4376,15 @@ void Player::DeleteOldCharacters(uint32 keepDays)
 void Player::SetFly(bool enable)
 {
     if (enable)
+    {
         m_movementInfo.moveFlags = (MOVEFLAG_LEVITATING | MOVEFLAG_SWIMMING | MOVEFLAG_CAN_FLY | MOVEFLAG_FLYING);
+        addUnitState(UNIT_STAT_FLYING_ALLOWED);
+    }
     else
+    {
         m_movementInfo.moveFlags = (MOVEFLAG_NONE);
+        clearUnitState(UNIT_STAT_FLYING_ALLOWED);
+    }
 
     SendHeartBeat(true);
 }
@@ -4518,7 +4524,7 @@ void Player::KillPlayer()
     ApplyModByteFlag(PLAYER_FIELD_BYTES, 0, PLAYER_FIELD_BYTE_RELEASE_TIMER, !sMapStorage.LookupEntry<MapEntry>(GetMapId())->Instanceable());
 
     // 6 minutes until repop at graveyard
-    m_deathTimer = 6 * MINUTE * IN_MILLISECONDS;
+    m_deathTimer = CORPSE_REPOP_TIME;
 
     UpdateCorpseReclaimDelay();                             // dependent at use SetDeathPvP() call before kill
 
@@ -11341,11 +11347,12 @@ void Player::SwapItem(uint16 src, uint16 dst)
     AutoUnequipOffhandIfNeed();
 }
 
-void Player::AddItemToBuyBackSlot(Item *pItem, uint32 money)
+void Player::AddItemToBuyBackSlot(Item *pItem, uint32 money, ObjectGuid vendorGuid)
 {
     MANGOS_ASSERT(!!pItem);
 
     uint32 slot = m_currentBuybackSlot;
+#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_7_1
     // if current back slot non-empty search oldest or free
     if (m_items[slot])
     {
@@ -11389,6 +11396,20 @@ void Player::AddItemToBuyBackSlot(Item *pItem, uint32 money)
     // move to next (for non filled list is move most optimized choice)
     if (m_currentBuybackSlot < BUYBACK_SLOT_END - 1)
         ++m_currentBuybackSlot;
+#else
+    RemoveItemFromBuyBackSlot(slot, true);
+    DEBUG_LOG("STORAGE: AddItemToBuyBackSlot item = %u, slot = %u", pItem->GetEntry(), slot);
+    m_items[slot] = pItem;
+    SetGuidValue(PLAYER_FIELD_VENDORBUYBACK_SLOT_1, pItem->GetObjectGuid());
+    SetUInt32Value(PLAYER_FIELD_BUYBACK_ITEM_ID, pItem->GetEntry());
+    SetUInt32Value(PLAYER_FIELD_BUYBACK_RANDOM_PROPERTIES_ID, pItem->GetItemRandomPropertyId());
+    SetUInt32Value(PLAYER_FIELD_BUYBACK_SEED, pItem->GetItemSuffixFactor());
+    SetUInt32Value(PLAYER_FIELD_BUYBACK_PRICE, pItem->GetProto()->BuyPrice);
+    SetUInt32Value(PLAYER_FIELD_BUYBACK_DURABILITY, pItem->GetUInt32Value(ITEM_FIELD_DURABILITY));
+    SetUInt32Value(PLAYER_FIELD_BUYBACK_COUNT, pItem->GetCount());
+    SetUInt64Value(PLAYER_FIELD_BUYBACK_NPC, vendorGuid);
+#endif
+
 }
 
 Item* Player::GetItemFromBuyBackSlot(uint32 slot)
@@ -11413,10 +11434,20 @@ void Player::RemoveItemFromBuyBackSlot(uint32 slot, bool del)
 
         m_items[slot] = NULL;
 
+#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_7_1
         uint32 eslot = slot - BUYBACK_SLOT_START;
         SetGuidValue(PLAYER_FIELD_VENDORBUYBACK_SLOT_1 + (eslot * 2), ObjectGuid());
         SetUInt32Value(PLAYER_FIELD_BUYBACK_PRICE_1 + eslot, 0);
         SetUInt32Value(PLAYER_FIELD_BUYBACK_TIMESTAMP_1 + eslot, 0);
+#else
+        SetGuidValue(PLAYER_FIELD_VENDORBUYBACK_SLOT_1, ObjectGuid());
+        SetUInt32Value(PLAYER_FIELD_BUYBACK_ITEM_ID, 0);
+        SetUInt32Value(PLAYER_FIELD_BUYBACK_RANDOM_PROPERTIES_ID, 0);
+        SetUInt32Value(PLAYER_FIELD_BUYBACK_SEED, 0);
+        SetUInt32Value(PLAYER_FIELD_BUYBACK_PRICE, 0);
+        SetUInt32Value(PLAYER_FIELD_BUYBACK_DURABILITY, 0);
+        SetUInt32Value(PLAYER_FIELD_BUYBACK_COUNT, 0);
+#endif
 
         // if current backslot is filled set to now free slot
         if (m_items[m_currentBuybackSlot])
@@ -14750,7 +14781,7 @@ bool Player::LoadFromDB(ObjectGuid guid, SqlQueryHolder *holder)
         // problems with taxi path loading
         TaxiNodesEntry const* nodeEntry = NULL;
         if (uint32 node_id = m_taxi.GetTaxiSource())
-            nodeEntry = sObjectMgr.GeTaxiNodeEntry(node_id);
+            nodeEntry = sObjectMgr.GetTaxiNodeEntry(node_id);
 
         if (!nodeEntry)                                     // don't know taxi start node, to homebind
         {
@@ -14777,7 +14808,7 @@ bool Player::LoadFromDB(ObjectGuid guid, SqlQueryHolder *holder)
     if (uint32 node_id = m_taxi.GetTaxiSource())
     {
         // save source node as recall coord to prevent recall and fall from sky
-        TaxiNodesEntry const* nodeEntry = sObjectMgr.GeTaxiNodeEntry(node_id);
+        TaxiNodesEntry const* nodeEntry = sObjectMgr.GetTaxiNodeEntry(node_id);
         MANGOS_ASSERT(nodeEntry);                           // checked in m_taxi.LoadTaxiDestinationsFromString
         m_recallMap = nodeEntry->map_id;
         m_recallX = nodeEntry->x;
@@ -17374,7 +17405,7 @@ bool Player::ActivateTaxiPathTo(std::vector<uint32> const& nodes, Creature* npc 
     uint32 sourcenode = nodes[0];
 
     // starting node too far away (cheat?)
-    TaxiNodesEntry const* node = sObjectMgr.GeTaxiNodeEntry(sourcenode);
+    TaxiNodesEntry const* node = sObjectMgr.GetTaxiNodeEntry(sourcenode);
     if (!node)
     {
         WorldPacket data(SMSG_ACTIVATETAXIREPLY, 4);
@@ -21119,7 +21150,7 @@ void Player::TaxiStepFinished()
     if (!curDest)
         return;
 
-    TaxiNodesEntry const* curDestNode = sObjectMgr.GeTaxiNodeEntry(curDest);
+    TaxiNodesEntry const* curDestNode = sObjectMgr.GetTaxiNodeEntry(curDest);
 
     // far teleport case
     if (curDestNode && curDestNode->map_id != GetMapId())

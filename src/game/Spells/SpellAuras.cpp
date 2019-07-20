@@ -1653,6 +1653,12 @@ void Aura::HandleAuraDummy(bool apply, bool Real)
                         }
                         return;
                     }
+                    case 8067:                              // Party Time!
+                    {
+                        m_isPeriodic = true;
+                        m_modifier.periodictime = 10 * IN_MILLISECONDS;;
+                        return;
+                    }
                     case 10255:                             // Stoned
                     {
                         if (Unit* caster = GetCaster())
@@ -3562,6 +3568,16 @@ void Aura::HandleModStealth(bool apply, bool Real)
         // for RACE_NIGHTELF stealth
         if (Real && target->GetTypeId() == TYPEID_PLAYER && GetId() == 20580)
             target->RemoveAurasDueToSpell(21009);
+
+        if (Real && (m_removeMode == AURA_REMOVE_BY_CANCEL) &&
+            GetSpellProto()->IsFitToFamilyMask<CF_ROGUE_STEALTH>())
+        {
+            // https://us.forums.blizzard.com/en/wow/t/wow-classic-not-a-bug-list/175887/45?blzcmp=app
+            // "Manually cancelling Stealth after using Vanish will
+            //  remove the Vanish buff as well as the Stealth buff."
+            target->RemoveAurasDueToSpellByCancel(11327);
+            target->RemoveAurasDueToSpellByCancel(11329);
+        }   
 
         // only at real aura remove of _last_ SPELL_AURA_MOD_STEALTH
         if (Real && !target->HasAuraType(SPELL_AURA_MOD_STEALTH))
@@ -6072,6 +6088,28 @@ void Aura::PeriodicDummyTick()
                     // 7053 Forsaken Skill: Shadow
                     return;
                 }
+                case 8067:                                  // Party Time!
+                {
+                    switch (urand(0, 4))
+                    {
+                        case 0:
+                            target->HandleEmoteCommand(EMOTE_ONESHOT_APPLAUD);
+                            return;
+                        case 1:
+                            target->HandleEmoteCommand(EMOTE_ONESHOT_CHEER);
+                            return;
+                        case 2:
+                            target->HandleEmoteCommand(EMOTE_ONESHOT_CHICKEN);
+                            return;
+                        case 3:
+                            target->HandleEmoteCommand(EMOTE_ONESHOT_LAUGH);
+                            return;
+                        case 4:
+                            target->HandleEmoteCommand(EMOTE_ONESHOT_DANCE);
+                            return;
+                    }
+                    return;
+                }
                 case 7057:                                  // Haunting Spirits
                     if (roll_chance_i(33))
                         target->CastSpell(target, m_modifier.m_amount, true, nullptr, this);
@@ -6371,6 +6409,10 @@ void SpellAuraHolder::_AddSpellAuraHolder()
     // Update Seals information
     if (GetSpellProto()->IsSealSpell())
         m_target->ModifyAuraState(AURA_STATE_JUDGEMENT, true);
+
+    // Break stealth on target
+    if (GetSpellProto()->Custom & SPELL_CUSTOM_AURA_APPLY_BREAKS_STEALTH)
+        m_target->RemoveSpellsCausingAura(SPELL_AURA_MOD_STEALTH, this);
 }
 
 void SpellAuraHolder::_RemoveSpellAuraHolder()

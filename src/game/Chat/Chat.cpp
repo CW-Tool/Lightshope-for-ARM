@@ -1031,7 +1031,7 @@ ChatCommand * ChatHandler::getCommandTable()
         { NODE, "variable",       SEC_DEVELOPPER,     true,  &ChatHandler::HandleVariableCommand,            "", nullptr},
         { NODE, "god",            SEC_GAMEMASTER,     false, &ChatHandler::HandleGodCommand,                 "", nullptr },
         { NODE, "aura",           SEC_BASIC_ADMIN,    false, &ChatHandler::HandleAuraCommand,                "", nullptr },
-        { NODE, "nameaura",       SEC_BASIC_ADMIN,    false, &ChatHandler::HandleNameAuraCommand,			 "", nullptr },
+        { NODE, "nameaura",       SEC_BASIC_ADMIN,    false, &ChatHandler::HandleNameAuraCommand,            "", nullptr },
         { NODE, "unaura",         SEC_GAMEMASTER,     false, &ChatHandler::HandleUnAuraCommand,              "", nullptr },
         { NODE, "announce",       SEC_BASIC_ADMIN,    true,  &ChatHandler::HandleAnnounceCommand,            "", nullptr },
         { NODE, "notify",         SEC_BASIC_ADMIN,    true,  &ChatHandler::HandleNotifyCommand,              "", nullptr },
@@ -1102,6 +1102,7 @@ ChatCommand * ChatHandler::getCommandTable()
         { NODE, "repairitems",    SEC_GAMEMASTER,     true,  &ChatHandler::HandleRepairitemsCommand,         "", nullptr },
         { NODE, "stable",         SEC_TICKETMASTER,   false, &ChatHandler::HandleStableCommand,              "", nullptr },
         { NODE, "waterwalk",      SEC_GAMEMASTER,     false, &ChatHandler::HandleWaterwalkCommand,           "", nullptr },
+        { NODE, "wallclimb",      SEC_GAMEMASTER,     false, &ChatHandler::HandleWallclimbCommand,           "", nullptr },
         { NODE, "quit",           SEC_CONSOLE,        true,  &ChatHandler::HandleQuitCommand,                "", nullptr },
         { NODE, "mmap",           SEC_GAMEMASTER,     false, nullptr,                                        "", mmapCommandTable },
         { NODE, "video",          SEC_GAMEMASTER,     false, nullptr,                                        "", videosCommandTable },
@@ -3193,7 +3194,7 @@ bool ChatHandler::ExtractLocationFromLink(char** text, uint32& mapid, float& x, 
             if (!ExtractUInt32(&idS, id))
                 return false;
 
-            TaxiNodesEntry const* node = sObjectMgr.GeTaxiNodeEntry(id);
+            TaxiNodesEntry const* node = sObjectMgr.GetTaxiNodeEntry(id);
             if (!node)
                 return false;
             mapid = node->map_id;

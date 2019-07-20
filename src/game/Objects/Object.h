@@ -678,6 +678,7 @@ m_obj->m_updateTracker.Reset();
 
         void SetOrientation(float orientation);
 
+        Position const& GetPosition() const { return m_position; }
         float GetPositionX( ) const { return m_position.x; }
         float GetPositionY( ) const { return m_position.y; }
         float GetPositionZ( ) const { return m_position.z; }
@@ -802,8 +803,10 @@ m_obj->m_updateTracker.Reset();
         bool IsLevitating() const { return m_movementInfo.HasMovementFlag(MOVEFLAG_LEVITATING); }
         bool IsFlying() const { return m_movementInfo.HasMovementFlag(MOVEFLAG_FLYING); }
         bool IsWalking() const { return m_movementInfo.HasMovementFlag(MOVEFLAG_WALK_MODE); }
+        bool IsWalkingBackward() const { return m_movementInfo.HasMovementFlag(MOVEFLAG_BACKWARD); }
         bool IsMoving() const { return m_movementInfo.HasMovementFlag(MOVEFLAG_MASK_MOVING); }
         bool IsSwimming() const { return m_movementInfo.HasMovementFlag(MOVEFLAG_SWIMMING); }
+        bool IsMovingButNotWalking() const { return IsMoving() && !(IsWalking() || IsWalkingBackward()); }
 
         MovementInfo m_movementInfo;
         Transport * m_transport;

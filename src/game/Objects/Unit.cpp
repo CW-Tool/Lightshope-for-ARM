@@ -389,7 +389,7 @@ AutoAttackCheckResult Unit::CanAutoAttackTarget(Unit const* pVictim) const
     if (!pVictim->isAlive() || !isAlive())
         return ATTACK_RESULT_DEAD;
 
-    if (!CanReachWithMeleeAttack(pVictim) || (!IsWithinLOSInMap(pVictim) && !hasUnitState(UNIT_STAT_ALLOW_LOS_ATTACK)))
+    if (!CanReachWithMeleeAutoAttack(pVictim) || (!IsWithinLOSInMap(pVictim) && !hasUnitState(UNIT_STAT_ALLOW_LOS_ATTACK)))
         return  ATTACK_RESULT_NOT_IN_RANGE;
 
     if (!HasInArc(2 * M_PI_F / 3, pVictim))
@@ -1996,7 +1996,11 @@ void Unit::DealMeleeDamage(CalcDamageInfo *damageInfo, bool durabilityLoss)
 
     // Hmmmm dont like this emotes client must by self do all animations
     if (damageInfo->HitInfo & HITINFO_CRITICALHIT)
-        pVictim->HandleEmoteCommand(EMOTE_ONESHOT_WOUNDCRITICAL);
+    {
+        if (!(pVictim->IsCreature() && 
+           (static_cast<Creature*>(pVictim)->GetCreatureInfo()->type_flags & CREATURE_TYPEFLAGS_NO_WOUND_ANIM)))
+            pVictim->HandleEmoteCommand(EMOTE_ONESHOT_WOUNDCRITICAL);
+    }
 
     if (damageInfo->TargetState == VICTIMSTATE_PARRY)
     {
@@ -2262,10 +2266,11 @@ void Unit::CalculateDamageAbsorbAndResist(Unit *pCaster, SpellSchoolMask schoolM
         canResist = false;
 
     DEBUG_UNIT_IF(spellProto, this, DEBUG_SPELL_COMPUTE_RESISTS, "%s : Binary [%s]. Partial resists %s", spellProto->SpellName[2].c_str(), spellProto->IsBinary() ? "YES" : "NO", canResist ? "possible" : "impossible");
+    float const resistanceChance = pCaster->GetSpellResistChance(this, schoolMask, true);
 
-    if (canResist)
+    if (canResist || (resistanceChance < 0))
     {
-        const float multiplier = RollMagicResistanceMultiplierOutcomeAgainst(pCaster, schoolMask, damagetype, spellProto);
+        const float multiplier = RollMagicResistanceMultiplierOutcomeAgainst(pCaster, resistanceChance, schoolMask, damagetype, spellProto);
         *resist = int32(int64(damage) * multiplier);
         RemainingDamage -= *resist;
     }
@@ -2667,8 +2672,9 @@ MeleeHitOutcome Unit::RollMeleeOutcomeAgainst(const Unit *pVictim, WeaponAttackT
         {
             block_chance -= blockSkillBonus;
 
-            // Cannot be more than 5%
-            if (block_chance > 500) block_chance = 500;
+            // mobs cannot block more than 5% of attacks regardless of rating difference
+            if (!pVictim->IsPlayer() && (block_chance > 500))
+                block_chance = 500;
 
             // Low level reduction
             if (!pVictim->IsPlayer() && pVictim->getLevel() < 10)
@@ -2862,8 +2868,9 @@ bool Unit::IsSpellBlocked(Unit *pCaster, Unit *pVictim, SpellEntry const *spellE
     int32 skillDiff = int32(pCaster->GetWeaponSkillValue(attackType)) - int32(GetSkillMaxForLevel());
     blockChance -= pVictim->IsPlayer() ? skillDiff * 0.04f : skillDiff * 0.1f;
 
-    // Cannot be more than 5%
-    if (blockChance > 5) blockChance = 5.0f;
+    // mobs cannot block more than 5% of attacks regardless of rating difference
+    if (!pVictim->IsPlayer() && (blockChance > 5))
+        blockChance = 5.0f;
 
     // Low level reduction
     if (!pVictim->IsPlayer() && pVictim->getLevel() < 10)
@@ -3067,10 +3074,8 @@ SpellMissInfo Unit::MagicSpellHitResult(Unit* pVictim, SpellEntry const* spell, 
     return SPELL_MISS_NONE;
 }
 
-float Unit::RollMagicResistanceMultiplierOutcomeAgainst(const Unit* pCaster, SpellSchoolMask schoolMask, DamageEffectType damagetype, SpellEntry const* spellProto) const
+float Unit::RollMagicResistanceMultiplierOutcomeAgainst(const Unit* pCaster, float resistanceChance, SpellSchoolMask schoolMask, DamageEffectType damagetype, SpellEntry const* spellProto) const
 {
-    float resistanceChance = pCaster->GetSpellResistChance(this, schoolMask, true);
-
     // Magic vulnerability instead of magic resistance:
     if (resistanceChance < 0)
         return resistanceChance;
@@ -6272,11 +6277,16 @@ void Unit::RemoveCharmAuras()
     RemoveSpellsCausingAura(SPELL_AURA_AOE_CHARM);
 }
 
-float Unit::GetLeewayBonusRange(const Unit* target) const
+float Unit::GetLeewayBonusRange(const Unit* target, bool ability) const
 {
-    if (IsPlayer() && GetXZFlagBasedSpeed() > LEEWAY_MIN_MOVE_SPEED && target && target->GetXZFlagBasedSpeed() > LEEWAY_MIN_MOVE_SPEED)
-        return LEEWAY_BONUS_RANGE;
-
+    if (IsPlayer() && target)
+    {
+        if (ability)
+            return (GetXZFlagBasedSpeed() > LEEWAY_MIN_MOVE_SPEED && target->GetXZFlagBasedSpeed() > LEEWAY_MIN_MOVE_SPEED) ? LEEWAY_BONUS_RANGE : 0.0f;
+        else // auto attacks do not check speed, only flags
+            return (IsMovingButNotWalking() && target->IsMovingButNotWalking()) ? LEEWAY_BONUS_RANGE : 0.0f;
+    }
+    
     return 0.0f;
 }
 
@@ -7973,6 +7983,13 @@ bool Unit::isVisibleForOrDetect(Unit const* u, WorldObject const* viewPoint, boo
     // redundant phasing
     //if (!u->CanSeeInWorld(this))
     //    return false;
+
+    if (Creature const* pCreature = ToCreature())
+    {
+        if ((pCreature->GetCreatureInfo()->flags_extra & CREATURE_FLAG_EXTRA_ONLY_VISIBLE_TO_FRIENDLY) &&
+            !pCreature->IsFriendlyTo(u))
+            return false;
+    } 
 
     // Visible units are always visible for all units
     if (m_Visibility == VISIBILITY_ON)
@@ -11234,7 +11251,7 @@ void Unit::KnockBack(float angle, float horizontalSpeed, float verticalSpeed)
         MovementPacketSender::SendKnockBackToController(this, vcos, vsin, horizontalSpeed, -verticalSpeed); // !! notice the - sign in front of speedZ !!
 
         if (Player* pPlayer = ToPlayer())
-            GetPlayerMovingMe()->GetCheatData()->KnockBack(pPlayer, horizontalSpeed, verticalSpeed, vcos, vsin);
+            GetPlayerMovingMe()->GetCheatData()->OnKnockBack(pPlayer, horizontalSpeed, verticalSpeed, vcos, vsin);
     }
 }
 
@@ -11658,42 +11675,39 @@ float Unit::GetCombatReach(bool forMeleeRange /*=true*/) const
     return (forMeleeRange && reach < 1.5f) ? 1.5f : reach;
 }
 
-float Unit::GetCombatReach(Unit const* pVictim, bool forMeleeRange /*=true*/, float flat_mod /*=0.0f*/) const
+float Unit::GetCombatReach(Unit const* pVictim, bool ability, float flat_mod) const
 {
     float victimReach = (pVictim && pVictim->IsInWorld())
-        ? pVictim->GetCombatReach(forMeleeRange)
+        ? pVictim->GetCombatReach(true)
         : 0.0f;
 
-    float reach = GetCombatReach(forMeleeRange) + victimReach + flat_mod;
+    float reach = GetCombatReach(true) + victimReach + flat_mod;
 
-    if (forMeleeRange)
-    {
-        reach += BASE_MELEERANGE_OFFSET;
-        if (reach < ATTACK_DISTANCE)
-            reach = ATTACK_DISTANCE;
-    }
+    reach += BASE_MELEERANGE_OFFSET;
+    if (reach < ATTACK_DISTANCE)
+        reach = ATTACK_DISTANCE;
 
     // Melee leeway mechanic.
     // When both player and target has > 70% of normal runspeed, and are moving,
     // the player gains an additional 2.66yd of melee range.
-    reach += GetLeewayBonusRange(pVictim);
+    reach += GetLeewayBonusRange(pVictim, ability);
 
     return reach;
 }
 
-bool Unit::CanReachWithMeleeAttack(Unit const* pVictim, float flat_mod /*= 0.0f*/) const
+bool Unit::CanReachWithMeleeAutoAttack(Unit const* pVictim, float flat_mod /*= 0.0f*/) const
 {
     float x = GetPositionX(), y = GetPositionY(), z = GetPositionZ();
 
-    return CanReachWithMeleeAttackAtPosition(pVictim, x, y, z, flat_mod);
+    return CanReachWithMeleeAutoAttackAtPosition(pVictim, x, y, z, flat_mod);
 }
 
-bool Unit::CanReachWithMeleeAttackAtPosition(Unit const* pVictim, float x, float y, float z, float flat_mod /*= 0.0f*/) const
+bool Unit::CanReachWithMeleeAutoAttackAtPosition(Unit const* pVictim, float x, float y, float z, float flat_mod /*= 0.0f*/) const
 {
     if (!pVictim || !pVictim->IsInWorld())
         return false;
 
-    float reach = GetCombatReach(pVictim, true, flat_mod);
+    float reach = GetCombatReach(pVictim, false, flat_mod);
 
     float dx = x - pVictim->GetPositionX();
     float dy = y - pVictim->GetPositionY();
@@ -12069,7 +12083,11 @@ void Unit::DisableSpline()
 {
     if (Player* me = ToPlayer())
         me->SetFallInformation(0, me->GetPositionZ());
-    m_movementInfo.RemoveMovementFlag(MovementFlags(MOVEFLAG_SPLINE_ENABLED | MOVEFLAG_FORWARD));
+#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_7_1
+    m_movementInfo.RemoveMovementFlag(MOVEFLAG_SPLINE_ENABLED | MOVEFLAG_FORWARD);
+#else
+    m_movementInfo.RemoveMovementFlag(MOVEFLAG_FORWARD);
+#endif
     movespline->_Interrupt();
 }
 

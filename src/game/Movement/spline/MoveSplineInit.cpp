@@ -22,6 +22,7 @@
 #include "Unit.h"
 #include "Transport.h"
 #include "ObjectAccessor.h"
+#include "Anticheat.h"
 
 namespace Movement
 {
@@ -95,7 +96,11 @@ int32 MoveSplineInit::Launch()
     }
     else
     {
+#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_7_1
         moveFlags |= (MOVEFLAG_SPLINE_ENABLED | MOVEFLAG_FORWARD);
+#else
+        moveFlags |= MOVEFLAG_FORWARD;
+#endif
 
         if (args.flags.runmode)
             moveFlags &= ~MOVEFLAG_WALK_MODE;
@@ -115,6 +120,9 @@ int32 MoveSplineInit::Launch()
 
     if (!args.Validate(&unit))
         return 0;
+
+    if (Player* pPlayer = unit.ToPlayer())
+        pPlayer->GetCheatData()->ResetJumpCounters();
 
     unit.m_movementInfo.SetMovementFlags((MovementFlags)moveFlags);
     move_spline.SetMovementOrigin(movementType);
@@ -188,9 +196,6 @@ int32 MoveSplineInit::Launch()
     if (moveFlags & MOVEFLAG_WALK_MODE && !(oldMoveFlags & MOVEFLAG_WALK_MODE)) // Switch to walk mode
         mvtData.SetSplineOpcode(MSG_MOVE_SET_WALK_MODE, unit.GetObjectGuid());
 #endif
-
-    // Clear client root here, after we've added it to the packet - STATE SHOULD NOT BE USED
-    unit.clearUnitState(UNIT_STAT_CLIENT_ROOT);
         
     mvtData.AddPacket(data);
     // Do not forget to restore velocity after movement !
