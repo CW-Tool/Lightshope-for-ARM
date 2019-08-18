@@ -527,14 +527,16 @@ bool Creature::UpdateEntry(uint32 Entry, Team team, const CreatureData *data /*=
         SetLootAndXPModDist(150.0f);
 
     m_reputationId = -1;
+
     // checked and error show at loading templates
     if (FactionTemplateEntry const* pFactionTemplate = sObjectMgr.GetFactionTemplateEntry(GetCreatureInfo()->faction))
-    {
-        if (pFactionTemplate->factionFlags & FACTION_TEMPLATE_FLAG_PVP || IsCivilian())
-            SetPvP(true);
         if (const FactionEntry* pFaction = sObjectMgr.GetFactionEntry(pFactionTemplate->faction))
             m_reputationId = pFaction->reputationListID;
-    }
+
+    if (GetCreatureInfo()->flags_extra & CREATURE_FLAG_EXTRA_PVP)
+        SetPvP(true);
+    else
+        SetPvP(false);
 
     for (int i = 0; i < CREATURE_MAX_SPELLS; ++i)
         m_spells[i] = GetCreatureInfo()->spells[i];
@@ -916,16 +918,18 @@ void Creature::RegenerateHealth()
         else
         {
             float HealthIncreaseRate = sWorld.getConfig(CONFIG_FLOAT_RATE_HEALTH);
-            float Spirit = GetStat(STAT_SPIRIT);
 
-            addvalue = uint32(Spirit * 0.25 * HealthIncreaseRate);
-            addvalue *= 4; // Le timer tick toutes les 4 secondes.
+            addvalue = uint32(GetRegenHPPerSpirit() * HealthIncreaseRate);
+            addvalue *= 4; // The timer ticks every 4 seconds.
         }
     }
     else
     {
         addvalue = maxValue / 3;
     }
+
+    if (addvalue < 0)
+        addvalue = 0;
 
     ModifyHealth(addvalue);
 }
@@ -3761,6 +3765,23 @@ void Creature::JoinCreatureGroup(Creature* leader, float dist, float angle, uint
     SetCreatureGroup(group);
     if (group->IsFormation())
         GetMotionMaster()->Initialize();
+}
+
+void Creature::LeaveCreatureGroup()
+{
+    if (CreatureGroup* pGroup = GetCreatureGroup())
+    {
+        if (pGroup->GetLeaderGuid() == GetObjectGuid())
+        {
+            pGroup->DisbandGroup(this);
+            delete pGroup;
+        }
+        else
+        {
+            pGroup->RemoveMember(GetObjectGuid());
+            SetCreatureGroup(nullptr);
+        }
+    }
 }
 
 bool Creature::HasWeapon() const

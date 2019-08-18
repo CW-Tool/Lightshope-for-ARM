@@ -577,6 +577,7 @@ bool MovementCheatData::HandlePositionTests(Player* pPlayer, MovementInfo& movem
     // Client controlled movement.
     else
     {
+#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_9_4
         // Not allowed to change jump speed while jumping
         if ((movementInfo.moveFlags & (MOVEFLAG_JUMPING | MOVEFLAG_FALLINGFAR)) &&
            (GetLastMovementInfo().moveFlags & (MOVEFLAG_JUMPING | MOVEFLAG_FALLINGFAR)) &&
@@ -584,6 +585,7 @@ bool MovementCheatData::HandlePositionTests(Player* pPlayer, MovementInfo& movem
            (GetLastMovementInfo().jump.xyspeed > 0.0001f) &&
            (!IsInKnockBack()))
             APPEND_CHEAT(CHEAT_TYPE_JUMP_SPEED_CHANGE);
+#endif
 
         if (opcode == MSG_MOVE_JUMP && movementInfo.jump.xyspeed > (GetSpeedForMovementInfo(GetLastMovementInfo()) + 0.0001f))
             APPEND_CHEAT(CHEAT_TYPE_OVERSPEED_JUMP);
@@ -732,6 +734,7 @@ bool MovementCheatData::HandleFlagTests(Player* pPlayer, MovementInfo& movementI
 
     if ((currentMoveFlags & MOVEFLAG_SWIMMING) &&
         (currentMoveFlags & MOVEFLAG_FLYING) &&
+        !me->IsTaxiFlying() &&
         !me->hasUnitState(UNIT_STAT_FLYING_ALLOWED))
     {
         APPEND_CHEAT(CHEAT_TYPE_FLY_HACK_SWIM);
@@ -774,6 +777,7 @@ bool MovementCheatData::HandleFlagTests(Player* pPlayer, MovementInfo& movementI
 
     if (ShouldRejectMovement(cheatFlags))
     {
+        me->RemoveUnitMovementFlag(removeMoveFlags);
         me->SendHeartBeat(true);
         return false;
     }
@@ -981,7 +985,8 @@ uint32 MovementCheatData::CheckSpeedHack(MovementInfo const& movementInfo, uint1
     if (!sWorld.getConfig(CONFIG_BOOL_AC_MOVEMENT_CHEAT_SPEED_HACK_ENABLED) ||
        (movementInfo.moveFlags & MOVEFLAG_ONTRANSPORT) ||
        (opcode == CMSG_MOVE_KNOCK_BACK_ACK) ||
-        me->IsTaxiFlying())
+        me->IsTaxiFlying() || 
+        me->IsBeingTeleported())
         return 0;
 
     uint32 cheatFlags = 0x0;

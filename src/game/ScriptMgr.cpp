@@ -29,6 +29,7 @@
 #include "ScriptLoader.h"
 #include "Conditions.h"
 #include "GameEventMgr.h"
+#include "CreatureGroups.h"
 
 typedef std::vector<Script*> ScriptVector;
 int num_sc_scripts;
@@ -1195,6 +1196,16 @@ void ScriptMgr::LoadScripts(ScriptMapMap& scripts, const char* tablename)
                 }
                 break;
             }
+            case SCRIPT_COMMAND_JOIN_CREATURE_GROUP:
+            {
+                if (tmp.joinCreatureGroup.options & ~ALL_CREATURE_GROUP_OPTIONS)
+                {
+                    sLog.outErrorDb("Table `%s` using unknown option in datalong (%u) in SCRIPT_COMMAND_JOIN_CREATURE_GROUP for script id %u",
+                        tablename, tmp.joinCreatureGroup.options, tmp.id);
+                    continue;
+                }
+                break;
+            }
         }
 
         if (scripts.find(tmp.id) == scripts.end())
@@ -1255,6 +1266,18 @@ void ScriptMgr::LoadSpellScripts()
 {
     LoadScripts(sSpellScripts, "spell_scripts");
 
+    std::set<uint32> scriptSpells;
+    std::unique_ptr<QueryResult> result(WorldDatabase.Query("SELECT `entry` FROM `spell_template` WHERE 77 IN (`effect1`, `effect2`, `effect3`)"));
+    if (result)
+    {
+        do
+        {
+            Field* fields = result->Fetch();
+            uint32 spellId = fields[0].GetUInt32();
+            scriptSpells.insert(spellId);
+        } while (result->NextRow());
+    }
+
     // check ids
     for (ScriptMapMap::const_iterator itr = sSpellScripts.begin(); itr != sSpellScripts.end(); ++itr)
     {
@@ -1281,6 +1304,9 @@ void ScriptMgr::LoadSpellScripts()
                 break;
             }
         }
+
+        if (scriptSpells.find(itr->first) != scriptSpells.cend())
+            found = true;
 
         if (!found)
             sLog.outErrorDb("Table `spell_scripts` has unsupported spell (Id: %u) without SPELL_EFFECT_SCRIPT_EFFECT (%u) spell effect", itr->first, SPELL_EFFECT_SCRIPT_EFFECT);

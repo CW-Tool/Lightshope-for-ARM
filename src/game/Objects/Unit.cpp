@@ -188,6 +188,7 @@ Unit::Unit()
 
     m_CombatTimer = 0;
     m_lastManaUseTimer = 0;
+    m_lastManaUseSpellId = 0;
 
     //m_victimThreat = 0.0f;
     for (int i = 0; i < MAX_SPELL_SCHOOL; ++i)
@@ -291,7 +292,14 @@ void Unit::Update(uint32 update_diff, uint32 p_time)
     if (m_lastManaUseTimer)
     {
         if (update_diff >= m_lastManaUseTimer)
-            m_lastManaUseTimer = 0;
+        {
+            // Do not regen mana if still channeling last spell that took mana.
+            if (!m_currentSpells[CURRENT_CHANNELED_SPELL] || (m_currentSpells[CURRENT_CHANNELED_SPELL]->m_spellInfo->Id != m_lastManaUseSpellId))
+            {
+                m_lastManaUseTimer = 0;
+                m_lastManaUseSpellId = 0;
+            }
+        }
         else
             m_lastManaUseTimer -= update_diff;
     }
@@ -871,7 +879,7 @@ uint32 Unit::DealDamage(Unit *pVictim, uint32 damage, CleanDamage const* cleanDa
         duel_hasEnded = true;
     }
     //Get in CombatState
-    if ((pVictim != this) && (damagetype != DOT || (spellProto && !spellProto->IsSpellAppliesPeriodicAura())) &&
+    if ((pVictim != this) && (damagetype != DOT || (spellProto && spellProto->HasEffect(SPELL_EFFECT_PERSISTENT_AREA_AURA))) &&
        (!spellProto || !spellProto->HasAura(SPELL_AURA_DAMAGE_SHIELD)))
     {
         SetInCombatWithVictim(pVictim);
@@ -7866,11 +7874,10 @@ bool Unit::IsValidAttackTarget(Unit const* target) const
 
 int32 Unit::ModifyHealth(int32 dVal)
 {
-    int32 gain = 0;
-
     if (dVal == 0)
         return 0;
 
+    int32 gain = 0;
     int32 curHealth = (int32)GetHealth();
 
     int32 val = dVal + curHealth;
@@ -7898,11 +7905,10 @@ int32 Unit::ModifyHealth(int32 dVal)
 
 int32 Unit::ModifyPower(Powers power, int32 dVal)
 {
-    int32 gain = 0;
-
     if (dVal == 0)
         return 0;
 
+    int32 gain = 0;
     int32 curPower = (int32)GetPower(power);
 
     int32 val = dVal + curPower;
@@ -7926,6 +7932,84 @@ int32 Unit::ModifyPower(Powers power, int32 dVal)
     }
 
     return gain;
+}
+
+float Unit::GetRegenHPPerSpirit() const
+{
+    float regen = 0.0f;
+
+    float Spirit = GetStat(STAT_SPIRIT);
+    uint8 Class = getClass();
+
+    switch (Class)
+    {
+        case CLASS_DRUID:
+            regen = (Spirit * 0.11 + 1);
+            break;
+        case CLASS_HUNTER:
+            regen = (Spirit * 0.43 - 5.5);
+            break;
+        case CLASS_MAGE:
+            regen = (Spirit * 0.11 + 1);
+            break;
+        case CLASS_PALADIN:
+            regen = (Spirit * 0.25);
+            break;
+        case CLASS_PRIEST:
+            regen = (Spirit * 0.15 + 1.4);
+            break;
+        case CLASS_ROGUE:
+            regen = (Spirit * 0.84 - 13);
+            break;
+        case CLASS_SHAMAN:
+            regen = (Spirit * 0.28 - 3.6);
+            break;
+        case CLASS_WARLOCK:
+            regen = (Spirit * 0.12 + 1.5);
+            break;
+        case CLASS_WARRIOR:
+            regen = (Spirit * 1.26 - 22.6);
+            break;
+    }
+
+    return std::max(0.0f, regen);
+}
+
+float Unit::GetRegenMPPerSpirit() const
+{
+    float addvalue = 0.0;
+
+    float Spirit = GetStat(STAT_SPIRIT);
+    uint8 Class = getClass();
+
+    switch (Class)
+    {
+        case CLASS_DRUID:
+            addvalue = (Spirit / 5 + 15);
+            break;
+        case CLASS_HUNTER:
+            addvalue = (Spirit / 5 + 15);
+            break;
+        case CLASS_MAGE:
+            addvalue = (Spirit / 4 + 12.5);
+            break;
+        case CLASS_PALADIN:
+            addvalue = (Spirit / 5 + 15);
+            break;
+        case CLASS_PRIEST:
+            addvalue = (Spirit / 4 + 12.5);
+            break;
+        case CLASS_SHAMAN:
+            addvalue = (Spirit / 5 + 17);
+            break;
+        case CLASS_WARLOCK:
+            addvalue = (Spirit / 5 + 15);
+            break;
+    }
+
+    addvalue /= 2.0f;   // the above addvalue are given per tick which occurs every 2 seconds, hence this divide by 2
+
+    return addvalue;
 }
 
 bool Unit::isVisibleForOrDetect(Unit const* u, WorldObject const* viewPoint, bool detect, bool /*inVisibleList*/, bool* alert) const
@@ -12083,11 +12167,7 @@ void Unit::DisableSpline()
 {
     if (Player* me = ToPlayer())
         me->SetFallInformation(0, me->GetPositionZ());
-#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_7_1
     m_movementInfo.RemoveMovementFlag(MOVEFLAG_SPLINE_ENABLED | MOVEFLAG_FORWARD);
-#else
-    m_movementInfo.RemoveMovementFlag(MOVEFLAG_FORWARD);
-#endif
     movespline->_Interrupt();
 }
 

@@ -71,6 +71,7 @@ void WaypointMovementGenerator<Creature>::Initialize(Creature &creature)
 
 void WaypointMovementGenerator<Creature>::InitializeWaypointPath(Creature& u, int32 id, uint32 startPoint, WaypointPathOrigin wpSource, uint32 initialDelay, uint32 overwriteEntry, bool repeat)
 {
+    m_isWandering = false;
     m_repeating = repeat;
     LoadPath(u, id, wpSource, overwriteEntry);
 
@@ -105,18 +106,39 @@ void WaypointMovementGenerator<Creature>::Interrupt(Creature &creature)
 void WaypointMovementGenerator<Creature>::Reset(Creature &creature)
 {
     creature.addUnitState(UNIT_STAT_ROAMING | UNIT_STAT_ROAMING_MOVE);
-    StartMoveNow(creature);
+
+    if (m_isWandering)
+    {
+        // prevent a crash at empty waypoint path.
+        if (!i_path || i_path->empty())
+            return;
+
+        const WaypointNode& node = i_path->at(m_lastReachedWaypoint);
+        float const speed = creature.GetDistance(node.x, node.y, node.z) / (1000 * 0.001f);
+        creature.MonsterMoveWithSpeed(node.x, node.y, node.z, node.orientation, speed, MOVE_FORCE_DESTINATION);
+    }
+    else
+    {
+        StartMoveNow(creature);
+    }
 }
 
-void WaypointMovementGenerator<Creature>::OnArrived(Creature& creature)
+bool WaypointMovementGenerator<Creature>::OnArrived(Creature& creature)
 {
     if (!i_path || i_path->empty())
-        return;
+        return false;
+
+    if (m_isWandering)
+    {
+        m_isWandering = false;
+        Stop(1000);
+        return false;
+    }
 
     m_lastReachedWaypoint = i_currentNode;
 
     if (m_isArrivalDone)
-        return;
+        return true;
 
     creature.clearUnitState(UNIT_STAT_ROAMING_MOVE);
     m_isArrivalDone = true;
@@ -174,7 +196,20 @@ void WaypointMovementGenerator<Creature>::OnArrived(Creature& creature)
     }
 
     // Wait delay ms
-    Stop(node.delay);
+    if (node.delay)
+    {
+        if (node.wander_distance)
+        {
+            m_isWandering = true;
+            creature.GetMotionMaster()->MoveRandom(true, node.wander_distance, node.delay);
+        }
+        else
+            Stop(node.delay);
+
+        return false;
+    }
+
+    return true;
 }
 
 void WaypointMovementGenerator<Creature>::StartMove(Creature &creature)
@@ -268,8 +303,8 @@ bool WaypointMovementGenerator<Creature>::Update(Creature &creature, const uint3
             Stop(STOP_TIME_FOR_PLAYER);
         else if (creature.movespline->Finalized())
         {
-            OnArrived(creature);
-            StartMove(creature);
+            if (OnArrived(creature))
+                StartMove(creature);
         }
     }
     return true;
@@ -353,6 +388,7 @@ void FlightPathMovementGenerator::Finalize(Player & player)
 
     // remove flag to prevent send object build movement packets for flight state and crash (movement generator already not at top of stack)
     player.clearUnitState(UNIT_STAT_TAXI_FLIGHT);
+    player.RemoveUnitMovementFlag(MOVEFLAG_FLYING);
 
     player.Unmount();
     player.RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_DISABLE_MOVE | UNIT_FLAG_TAXI_FLIGHT);
@@ -379,6 +415,7 @@ void FlightPathMovementGenerator::Finalize(Player & player)
 void FlightPathMovementGenerator::Interrupt(Player & player)
 {
     player.clearUnitState(UNIT_STAT_TAXI_FLIGHT);
+    player.RemoveUnitMovementFlag(MOVEFLAG_FLYING);
 }
 
 #define PLAYER_FLIGHT_SPEED        32.0f
