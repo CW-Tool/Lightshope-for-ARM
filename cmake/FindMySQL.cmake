@@ -70,9 +70,8 @@ find_path(MYSQL_INCLUDE_DIR
     /usr/include
     /usr/include/mysql
     /usr/local/include
-    /usr/include/mariadb
     /usr/local/include/mysql
-    /usr/local/mysql/include    
+    /usr/local/mysql/include
     "C:/Program Files/MySQL/include"
     "C:/Program Files/MySQL/MySQL Server 5.0/include"
     "C:/Program Files/MySQL/MySQL Server 5.1/include"
@@ -90,7 +89,7 @@ if( UNIX )
 foreach(LIB ${MYSQL_ADD_LIBRARIES})
   find_library( MYSQL_LIBRARY
     NAMES
-      mysql libmysql libmariadb.so ${LIB}
+      mysql libmysql ${LIB}
     PATHS
       ${MYSQL_ADD_LIBRARIES_PATH}
       /usr/lib
@@ -98,7 +97,6 @@ foreach(LIB ${MYSQL_ADD_LIBRARIES})
       /usr/local/lib
       /usr/local/lib/mysql
       /usr/local/mysql/lib
-      /usr/lib/arm-linux-gnueabihf
     DOC "Specify the location of the mysql library here."
   )
 endforeach(LIB ${MYSQL_ADD_LIBRARY})
