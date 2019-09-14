@@ -467,6 +467,8 @@ class MANGOS_DLL_SPEC ChatHandler
         bool HandleGameObjectSelectCommand(char* args);
         bool HandleGameObjectRespawnCommand(char* args);
         bool HandleGameObjectInfoCommand(char* args);
+        bool HandleGameObjectSetGoStateCommand(char* args);
+        bool HandleGameObjectSetLootStateCommand(char* args);
         GameObject* getSelectedGameObject();
 
         bool HandleGMCommand(char* args);
@@ -827,6 +829,7 @@ class MANGOS_DLL_SPEC ChatHandler
         bool HandleDieCommand(char* args);
         bool HandleFearCommand(char* args);
         bool HandleDamageCommand(char* args);
+        bool HandleAoEDamageCommand(char* args);
         bool HandleReviveCommand(char* args);
         bool HandleReplenishCommand(char* args);
         bool HandleModifyMorphCommand(char* args);

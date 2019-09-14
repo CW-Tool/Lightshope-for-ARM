@@ -4002,7 +4002,24 @@ void Spell::update(uint32 difftime)
     {
         // always cancel for channeled spells
         if (m_spellState == SPELL_STATE_CASTING)
-            cancel();
+        {
+            bool bInterrupt = true;
+
+            // except if its a self root, since player could have moved a bit before root ack (ravager proc)
+            for (int i = 0; i < MAX_EFFECT_INDEX; ++i)
+            {
+                if ((m_spellInfo->Effect[i] == SPELL_EFFECT_APPLY_AURA) &&
+                    ((m_spellInfo->EffectApplyAuraName[i] == SPELL_AURA_MOD_ROOT) || (m_spellInfo->EffectApplyAuraName[i] == SPELL_AURA_MOD_STUN)) &&
+                    (m_spellInfo->EffectImplicitTargetA[i] == TARGET_SELF))
+                {
+                    bInterrupt = !(m_caster->IsRooted() || m_caster->HasPendingMovementChange(ROOT));
+                    break;
+                }
+            }
+
+            if (bInterrupt)
+                cancel();
+        }
         // don't cancel for melee, autorepeat, triggered and instant spells
         else if (!IsNextMeleeSwingSpell() && !IsAutoRepeat() && !m_IsTriggeredSpell && (m_spellInfo->InterruptFlags & SPELL_INTERRUPT_FLAG_MOVEMENT))
             cancel();
@@ -5267,7 +5284,7 @@ SpellCastResult Spell::CheckCast(bool strict)
         return SPELL_CAST_OK;
 
     // Prevent casting while sitting unless the spell allows it
-    if (!m_IsTriggeredSpell && m_caster->IsSittingDown() && !(m_spellInfo->Attributes & SPELL_ATTR_CASTABLE_WHILE_SITTING))
+    if (!m_IsTriggeredSpell && !m_caster->IsStandingUp() && !(m_spellInfo->Attributes & SPELL_ATTR_CASTABLE_WHILE_SITTING))
         return SPELL_FAILED_NOT_STANDING;
     
     /*  Check cooldowns to prevent cheating (ignore passive spells, that client side visual only)
@@ -6250,9 +6267,11 @@ SpellCastResult Spell::CheckCast(bool strict)
                     if (!go->IsUseRequirementMet())
                         return SPELL_FAILED_TRY_AGAIN;
 
+#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_7_1
                     // Prevent looting chests while totally immune
                     if (go->GetGoType() == GAMEOBJECT_TYPE_CHEST && m_caster->ToPlayer()->IsTotalImmune())
                         return SPELL_FAILED_DAMAGE_IMMUNE;
+#endif
                 }
                 else if (Item* item = m_targets.getItemTarget())
                 {
