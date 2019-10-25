@@ -1098,7 +1098,7 @@ void Spell::DoAllEffectOnTarget(TargetInfo *target)
     WorldObject *pRealCaster = GetAffectiveCasterObject();
     WorldObject *pCaster = pRealCaster ? pRealCaster : m_caster;
     Unit* pUnitCaster = pCaster->ToUnit();
-    Unit* pRealUnitCaster = pRealCaster->ToUnit();
+    Unit* pRealUnitCaster = ToUnit(pRealCaster);
 
     SpellMissInfo missInfo = target->missCondition;
     // Need init unitTarget by default unit (can changed in code on reflect)
@@ -1685,7 +1685,7 @@ void Spell::DoSpellHitOnUnit(Unit *unit, uint32 effectMask)
 
     if (m_spellInfo->IsSpellAppliesAura(effectMask))
     {
-        m_spellAuraHolder = CreateSpellAuraHolder(m_spellInfo, unit, pRealUnitCaster ? pRealUnitCaster : unit, m_CastItem);
+        m_spellAuraHolder = CreateSpellAuraHolder(m_spellInfo, unit, pRealUnitCaster ? pRealUnitCaster : unit, m_caster, m_CastItem);
         m_spellAuraHolder->SetTriggered(IsTriggered());
         m_spellAuraHolder->setDiminishGroup(m_diminishGroup);
         m_spellAuraHolder->setDiminishLevel(m_diminishLevel);
@@ -4978,17 +4978,6 @@ void Spell::SendResurrectRequest(Player* target)
     target->GetSession()->SendPacket(&data);
 }
 
-void Spell::SendPlaySpellVisual(uint32 SpellID)
-{
-    if (!m_caster->IsPlayer())
-        return;
-
-    WorldPacket data(SMSG_PLAY_SPELL_VISUAL, 8 + 4);
-    data << m_caster->GetObjectGuid();
-    data << uint32(SpellID);                                // spell visual id?
-    ((Player*)m_caster)->GetSession()->SendPacket(&data);
-}
-
 void Spell::TakeCastItem()
 {
     if (!m_CastItem || !m_caster->IsPlayer())
@@ -5142,6 +5131,10 @@ void Spell::TakeAmmo()
     if (m_attackType == RANGED_ATTACK)
     {
         Item *pItem = pCaster->GetWeaponForAttack(RANGED_ATTACK, true, false);
+
+        // wands don't have ammo
+        if (!pItem || pItem->GetProto()->SubClass == ITEM_SUBCLASS_WEAPON_WAND)
+            return;
 
         if (pItem->GetProto()->InventoryType == INVTYPE_THROWN)
         {
@@ -6258,9 +6251,7 @@ SpellCastResult Spell::CheckCast(bool strict)
                 if (!creature->IsWithinDistInMap(m_caster, INTERACTION_DISTANCE))
                     return SPELL_FAILED_OUT_OF_RANGE;
 
-                uint32 skill = creature->GetCreatureInfo()->GetRequiredLootSkill();
-
-                int32 skillValue = ((Player*)m_caster)->GetSkillValue(skill);
+                int32 skillValue = ((Player*)m_caster)->GetSkillValue(SKILL_SKINNING);
                 int32 TargetLevel = m_targets.getUnitTarget()->getLevel();
                 int32 ReqValue = (skillValue < 100 ? (TargetLevel - 10) * 10 : TargetLevel * 5);
                 if (ReqValue > skillValue)

@@ -422,7 +422,7 @@ UpdateMask Player::updateVisualBits;
 Player::Player(WorldSession *session) : Unit(),
     m_mover(this), m_camera(this), m_reputationMgr(this),
     m_enableInstanceSwitch(true), m_currentTicketCounter(0),
-    m_honorMgr(this), m_bNextRelocationsIgnored(0), m_personalXpRate(-1.0f), m_standStateTimer(0), m_newStandState(MAX_UNIT_STAND_STATE)
+    m_honorMgr(this), m_bNextRelocationsIgnored(0), m_personalXpRate(-1.0f), m_standStateTimer(0), m_newStandState(MAX_UNIT_STAND_STATE), m_foodEmoteTimer(0)
 {
     m_objectType |= TYPEMASK_PLAYER;
     m_objectTypeId = TYPEID_PLAYER;
@@ -1242,6 +1242,7 @@ void Player::Update(uint32 update_diff, uint32 p_time)
     if (isAlive())
     {
         m_regenTimer -= update_diff;
+        HandleFoodEmotes(update_diff);
         RegenerateAll();
     }
     else
@@ -2223,6 +2224,41 @@ void Player::RewardRage(uint32 damage, bool attacker)
     addRage *= sWorld.getConfig(CONFIG_FLOAT_RATE_POWER_RAGE_INCOME);
 
     ModifyPower(POWER_RAGE, uint32(addRage * 10));
+}
+
+void Player::HandleFoodEmotes(uint32 diff)
+{
+    // Handles the emotes for drinking and eating.
+    // According to sniffs there is a background timer going on that repeats independed from the time window where the aura applies.
+    // That's why we dont need to reset the timer on apply. In sniffs I have seen that the first call for the spell visual is totally random, then after
+    // 5 seconds over and over again which confirms my theory that we have a independed timer.
+    if (m_foodEmoteTimer <= diff)
+    {
+        AuraList const& ModRegenAuras = GetAurasByType(SPELL_AURA_MOD_REGEN);
+        AuraList const& ModPowerRegenAuras = GetAurasByType(SPELL_AURA_MOD_POWER_REGEN);
+
+        for (auto itr = ModRegenAuras.begin(); itr != ModRegenAuras.end(); ++itr)
+        {
+            if ((*itr)->GetSpellProto()->HasAura(SPELL_AURA_MOD_REGEN) && (*itr)->GetSpellProto()->AuraInterruptFlags & AURA_INTERRUPT_FLAG_NOT_SEATED)
+            {
+                SendPlaySpellVisual(SPELL_VISUAL_KIT_FOOD);
+                break;
+            }
+        }
+
+        for (auto itr = ModPowerRegenAuras.begin(); itr != ModPowerRegenAuras.end(); ++itr)
+        {
+            if ((*itr)->GetSpellProto()->HasAura(SPELL_AURA_MOD_POWER_REGEN) && (*itr)->GetSpellProto()->AuraInterruptFlags & AURA_INTERRUPT_FLAG_NOT_SEATED)
+            {
+                SendPlaySpellVisual(SPELL_VISUAL_KIT_DRINK);
+                break;
+            }
+        }
+
+        m_foodEmoteTimer = 5000;
+    }
+    else
+        m_foodEmoteTimer -= diff;
 }
 
 void Player::RegenerateAll()
@@ -6203,7 +6239,7 @@ int32 Player::CalculateReputationGain(ReputationSource source, int32 rep, int32 
         percent *= repRate;
     }
 
-    return int32(sWorld.getConfig(CONFIG_FLOAT_RATE_REPUTATION_GAIN) * rep * percent / 100.0f);
+    return int32(round_float(sWorld.getConfig(CONFIG_FLOAT_RATE_REPUTATION_GAIN) * rep * percent / 100.0f));
 }
 
 //Calculates how many reputation points player gains in victim's enemy factions
@@ -10953,7 +10989,7 @@ void Player::SwapItem(uint16 src, uint16 dst)
 
     DEBUG_LOG("STORAGE: SwapItem bag = %u, slot = %u, item = %u", dstbag, dstslot, pSrcItem->GetEntry());
 
-    if (!isAlive())
+    if (!isAlive() && !(IsInventoryPos(src) && IsInventoryPos(dst)))
     {
         SendEquipError(EQUIP_ERR_YOU_ARE_DEAD, pSrcItem, pDstItem);
         return;
@@ -12975,7 +13011,7 @@ void Player::RewardQuest(Quest const *pQuest, uint32 reward, WorldObject* questE
             }
         }
         
-        MailDraft(mail_template_id).SetMoney(pQuest->GetRewMailMoney()).SendMailTo(this, creatureId ? MailSender(MAIL_CREATURE, creatureId) : questEnder, MAIL_CHECK_MASK_HAS_BODY, pQuest->GetRewMailDelaySecs());
+        MailDraft(mail_template_id, true, GetSession()->GetSessionDbcLocale()).SetMoney(pQuest->GetRewMailMoney()).SendMailTo(this, creatureId ? MailSender(MAIL_CREATURE, creatureId) : questEnder, MAIL_CHECK_MASK_HAS_BODY, pQuest->GetRewMailDelaySecs());
 
     }
         
@@ -15086,7 +15122,7 @@ void Player::LoadAura(AuraSaveStruct& s, uint32 timediff)
     else if (!s.stackcount)
         s.stackcount = 1;
 
-    SpellAuraHolder *holder = CreateSpellAuraHolder(spellproto, this, NULL);
+    SpellAuraHolder *holder = CreateSpellAuraHolder(spellproto, this, nullptr, nullptr);
     holder->SetLoadedState(s.caster_guid, ObjectGuid(HIGHGUID_ITEM, s.item_lowguid), s.stackcount, s.remaincharges, s.maxduration, s.remaintime);
 
     for (int32 i = 0; i < MAX_EFFECT_INDEX; ++i)
@@ -21103,7 +21139,11 @@ void Player::TaxiStepFinished()
             m_taxi.ClearTaxiDestinations();    // clear problematic path and next
     }
     else
+    {
+        // When the player reaches the last flight point, teleport to destination taxi node location
+        TeleportTo(curDestNode->map_id, curDestNode->x, curDestNode->y, curDestNode->z, GetOrientation());
         m_taxi.ClearTaxiDestinations();        // not destinations, clear source node
+    } 
 }
 
 

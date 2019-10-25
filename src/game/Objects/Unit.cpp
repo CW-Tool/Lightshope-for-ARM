@@ -3762,7 +3762,7 @@ void Unit::RemoveAurasDueToSpellBySteal(uint32 spellId, ObjectGuid casterGuid, U
 {
     SpellAuraHolder *holder = GetSpellAuraHolder(spellId, casterGuid);
     SpellEntry const* spellProto = sSpellMgr.GetSpellEntry(spellId);
-    SpellAuraHolder *new_holder = CreateSpellAuraHolder(spellProto, stealer, this);
+    SpellAuraHolder *new_holder = CreateSpellAuraHolder(spellProto, stealer, this, this);
 
     // set its duration and maximum duration
     // max duration 2 minutes (in msecs)
@@ -3980,7 +3980,7 @@ void Unit::RemoveSpellAuraHolder(SpellAuraHolder *holder, AuraRemoveMode mode)
     // Statue unsummoned at holder remove
     SpellEntry const* AurSpellInfo = holder->GetSpellProto();
     Totem* statue = nullptr;
-    Unit* caster = holder->GetCaster();
+    WorldObject* caster = holder->GetRealCaster();
     bool isChanneled = holder->IsChanneled(); // cache for after the holder is deleted
     if (isChanneled && caster)
         if (caster->GetTypeId() == TYPEID_UNIT && ((Creature*)caster)->IsTotem() && ((Totem*)caster)->GetTotemType() == TOTEM_STATUE)
@@ -4345,7 +4345,7 @@ void Unit::SendPeriodicAuraLog(SpellPeriodicAuraLogInfo *pInfo, AuraType auraTyp
     WorldPacket data(SMSG_PERIODICAURALOG, 30);
 #if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_8_4
     data << aura->GetTarget()->GetPackGUID();
-    data << aura->GetCasterGuid().WriteAsPacked();
+    data << aura->GetRealCasterGuid().WriteAsPacked();
 #else
     data << aura->GetTarget()->GetGUID();
     data << aura->GetCasterGuid().GetRawValue();
@@ -9459,7 +9459,7 @@ SpellAuraHolder* Unit::GetSpellAuraHolder(uint32 spellid, ObjectGuid casterGuid)
 {
     SpellAuraHolderConstBounds bounds = GetSpellAuraHolderBounds(spellid);
     for (SpellAuraHolderMap::const_iterator iter = bounds.first; iter != bounds.second; ++iter)
-        if (iter->second->GetCasterGuid() == casterGuid)
+        if (iter->second->GetRealCasterGuid() == casterGuid)
             return iter->second;
 
     return nullptr;
@@ -9947,7 +9947,7 @@ SpellAuraHolder* Unit::AddAura(uint32 spellId, uint32 addAuraFlags, Unit* pCaste
     if (!pCaster)
         pCaster = this;
 
-    SpellAuraHolder *holder = CreateSpellAuraHolder(spellInfo, this, pCaster);
+    SpellAuraHolder *holder = CreateSpellAuraHolder(spellInfo, this, pCaster, pCaster);
     if (!holder)
         return nullptr;
 
@@ -10157,6 +10157,14 @@ void Unit::SendSpellGo(Unit* target, uint32 spellId)
     data << uint8(0);
 
     data << targets;
+    SendMessageToSet(&data, true);
+}
+
+void Unit::SendPlaySpellVisual(uint32 id) const
+{
+    WorldPacket data(SMSG_PLAY_SPELL_VISUAL, 8 + 4);
+    data << uint64(GetGUID());
+    data << uint32(id); // SpellVisualKit.dbc index
     SendMessageToSet(&data, true);
 }
 
