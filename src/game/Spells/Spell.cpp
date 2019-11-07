@@ -577,6 +577,8 @@ void Spell::FillTargetMap()
                         SetTargetMap(SpellEffectIndex(i), m_spellInfo->EffectImplicitTargetA[i], tmpUnitMap);
                         if (m_casterUnit)
                             tmpUnitMap.push_back(m_casterUnit);
+                        else if (m_casterGo)
+                            AddGOTarget(m_casterGo, SpellEffectIndex(i));
                         break;
                     default:
                         SetTargetMap(SpellEffectIndex(i), m_spellInfo->EffectImplicitTargetA[i], tmpUnitMap);
@@ -2996,6 +2998,8 @@ void Spell::SetTargetMap(SpellEffectIndex effIndex, uint32 targetMode, UnitList&
 
             if (m_casterUnit)
                 targetUnitMap.push_back(m_casterUnit);
+            else if (m_casterGo)
+                AddGOTarget(m_casterGo, effIndex);
             break;
         }
         case TARGET_EFFECT_SELECT:
@@ -5715,6 +5719,12 @@ SpellCastResult Spell::CheckCast(bool strict)
     }
     else if (GameObject* goTarget = m_targets.getGOTarget())
     {
+#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_7_1
+        // Prevent cheating in case the player has an immunity effect and tries to interact with a non-allowed gameobject.
+        if (goTarget->GetGOInfo()->CannotBeUsedUnderImmunity() && m_casterUnit && m_casterUnit->HasFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_IMMUNE))
+            return SPELL_FAILED_DAMAGE_IMMUNE;
+#endif
+
         // Require LOS to loot chests
         // For example, check LoS when opening a gobj (spell 6477).
         // Prevents abuse with object id 165554 for example.
@@ -6312,7 +6322,7 @@ SpellCastResult Spell::CheckCast(bool strict)
 
 #if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_7_1
                     // Prevent looting chests while totally immune
-                    if (go->GetGoType() == GAMEOBJECT_TYPE_CHEST && m_caster->ToPlayer()->IsTotalImmune())
+                    if (go->GetGOInfo()->CannotBeUsedUnderImmunity() && m_caster->HasFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_IMMUNE))
                         return SPELL_FAILED_DAMAGE_IMMUNE;
 #endif
                 }
