@@ -9,6 +9,7 @@ This project is an independent continuation of the Elysium / LightsHope codebase
 - 1.10.2.5302
 - 1.9.4.5086
 - 1.8.4.4878
+- 1.7.1.4695
 
 ### Software requirement
 apt install mariadb-server cmake libace-dev libtbb-dev libmariadb-dev libssl-dev

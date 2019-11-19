@@ -823,7 +823,7 @@ struct CharmInfo
                                                         //return true if successful
     bool AddSpellToActionBar(uint32 spellid, ActiveStates newstate = ACT_DECIDE);
     bool RemoveSpellFromActionBar(uint32 spell_id);
-    void LoadPetActionBar(const std::string& data);
+    void LoadPetActionBar(std::string const& data);
     void BuildActionBar(WorldPacket* data);
     void SetSpellAutocast(uint32 spell_id, bool state);
     void SetActionBar(uint8 index, uint32 spellOrAction,ActiveStates type)
@@ -1408,6 +1408,7 @@ class MANGOS_DLL_SPEC Unit : public WorldObject
 
         virtual bool IsInWater() const;
         virtual bool IsUnderWater() const;
+        bool IsReachableBySwmming() const;
         bool isInAccessablePlaceFor(Creature const* c) const;
 
         void SendEnvironmentalDamageLog(uint8 type, uint32 damage, uint32 absorb, int32 resist) const;
@@ -1743,6 +1744,7 @@ class MANGOS_DLL_SPEC Unit : public WorldObject
         float ApplyTotalThreatModifier(float threat, SpellSchoolMask schoolMask = SPELL_SCHOOL_MASK_NORMAL);
         void DeleteThreatList();
         bool SelectHostileTarget();
+        Unit* GetTauntTarget() const;
         void TauntApply(Unit* pVictim);
         void TauntFadeOut(Unit *taunter);
         ThreatManager& getThreatManager() { return m_ThreatManager; }
@@ -1979,6 +1981,7 @@ class MANGOS_DLL_SPEC Unit : public WorldObject
         bool IsInRaidWith(Unit const* unit) const;
         bool HasBreakableByDamageCrowdControlAura(Unit* excludeCasterChannel= nullptr) const;
         bool HasBreakableByDamageAuraType(AuraType type, uint32 excludeAura) const;
+        bool HasAuraPetShouldAvoidBreaking(Unit* excludeCasterChannel = nullptr) const;
 
         // Cooldown management
         SpellCooldowns const& GetSpellCooldownMap() const { return m_spellCooldowns; }

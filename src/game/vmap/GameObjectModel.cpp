@@ -25,11 +25,10 @@
 #include "World.h"
 #include "GameObjectModel.h"
 #include "DBCStores.h"
-#include "Creature.h"
 
 struct GameobjectModelData
 {
-    GameobjectModelData(const std::string& name_, const G3D::AABox& box) :
+    GameobjectModelData(std::string const& name_, const G3D::AABox& box) :
         name(name_), bound(box) {}
 
     std::string name;
@@ -131,19 +130,19 @@ GameObjectModel* GameObjectModel::construct(const GameObject* const object)
     {
         // TODO: What kind of gobj should block LoS or not ?
         if (gobjInfo->type == GAMEOBJECT_TYPE_BUTTON && gobjInfo->button.losOK)
-            return NULL;
+            return nullptr;
         if (gobjInfo->type == GAMEOBJECT_TYPE_GOOBER && gobjInfo->goober.losOK)
-            return NULL;
+            return nullptr;
     }
     const GameObjectDisplayInfoEntry* info = sGameObjectDisplayInfoStore.LookupEntry(object->GetDisplayId());
     if (!info)
-        return NULL;
+        return nullptr;
 
     GameObjectModel* mdl = new GameObjectModel();
     if (!mdl->initialize(object, info))
     {
         delete mdl;
-        return NULL;
+        return nullptr;
     }
 
     return mdl;

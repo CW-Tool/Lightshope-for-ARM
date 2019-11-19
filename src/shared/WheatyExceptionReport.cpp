@@ -28,7 +28,7 @@ inline LPTSTR ErrorMessage(DWORD dw)
         dw,
         MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
         (LPTSTR) &lpMsgBuf,
-        0, NULL );
+        0, NULL);
     return (LPTSTR)lpMsgBuf;
 }
 
@@ -459,7 +459,7 @@ PEXCEPTION_POINTERS pExceptionInfo )
 
     CONTEXT trashableContext = *pCtx;
 
-    WriteStackDetails( &trashableContext, false, NULL );
+    WriteStackDetails( &trashableContext, false, NULL);
     printTracesForAllThreads();
 
 //    #ifdef _M_IX86                                          // X86 Only!
@@ -468,7 +468,7 @@ PEXCEPTION_POINTERS pExceptionInfo )
     _tprintf( _T("Local Variables And Parameters\r\n") );
 
     trashableContext = *pCtx;
-    WriteStackDetails( &trashableContext, true, NULL );
+    WriteStackDetails( &trashableContext, true, NULL);
 
     _tprintf( _T("========================\r\n") );
     _tprintf( _T("Global Variables\r\n") );

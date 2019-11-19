@@ -16,7 +16,6 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#include <iostream>
 #include <iomanip>
 #include <string>
 #include <sstream>
@@ -41,10 +40,10 @@ VMapManager2::VMapManager2()
 
 VMapManager2::~VMapManager2(void)
 {
-    for (InstanceTreeMap::iterator i = iInstanceMapTrees.begin(); i != iInstanceMapTrees.end(); ++i)
-        delete i->second;
-    for (ModelFileMap::iterator i = iLoadedModelFiles.begin(); i != iLoadedModelFiles.end(); ++i)
-        delete i->second.getModel();
+    for (auto& iInstanceMapTree : iInstanceMapTrees)
+        delete iInstanceMapTree.second;
+    for (auto& iLoadedModelFile : iLoadedModelFiles)
+        delete iLoadedModelFile.second.getModel();
 }
 
 //=========================================================
@@ -87,7 +86,7 @@ VMAPLoadResult VMapManager2::loadMap(const char* pBasePath, unsigned int pMapId,
 //=========================================================
 // load one tile (internal use only)
 
-bool VMapManager2::_loadMap(unsigned int pMapId, const std::string& basePath, uint32 tileX, uint32 tileY)
+bool VMapManager2::_loadMap(unsigned int pMapId, std::string const& basePath, uint32 tileX, uint32 tileY)
 {
     InstanceTreeMap::iterator instanceTree = iInstanceMapTrees.find(pMapId);
     if (instanceTree == iInstanceMapTrees.end())
@@ -95,7 +94,10 @@ bool VMapManager2::_loadMap(unsigned int pMapId, const std::string& basePath, ui
         std::string mapFileName = getMapFileName(pMapId);
         StaticMapTree* newTree = new StaticMapTree(pMapId, basePath);
         if (!newTree->InitMap(mapFileName, this))
+        {
+            delete newTree;
             return false;
+        }
         instanceTree = iInstanceMapTrees.insert(InstanceTreeMap::value_type(pMapId, newTree)).first;
     }
     return instanceTree->second->LoadMapTile(tileX, tileY, this);
@@ -151,8 +153,8 @@ bool VMapManager2::isInLineOfSight(unsigned int pMapId, float x1, float y1, floa
 }
 ModelInstance* VMapManager2::FindCollisionModel(unsigned int mapId, float x0, float y0, float z0, float x1, float y1, float z1)
 {
-    if (!isLineOfSightCalcEnabled()) return NULL;
-    ModelInstance* result = NULL;
+    if (!isLineOfSightCalcEnabled()) return nullptr;
+    ModelInstance* result = nullptr;
     InstanceTreeMap::iterator instanceTree = iInstanceMapTrees.find(mapId);
     if (instanceTree != iInstanceMapTrees.end())
     {
@@ -266,7 +268,7 @@ bool VMapManager2::GetLiquidLevel(uint32 pMapId, float x, float y, float z, uint
 
 //=========================================================
 
-WorldModel* VMapManager2::acquireModelInstance(const std::string& basepath, const std::string& filename)
+WorldModel* VMapManager2::acquireModelInstance(std::string const& basepath, std::string const& filename)
 {
     m_modelsLock.acquire_read();
     ModelFileMap::iterator model = iLoadedModelFiles.find(filename);
@@ -288,7 +290,7 @@ WorldModel* VMapManager2::acquireModelInstance(const std::string& basepath, cons
             ERROR_LOG("VMapManager2: could not load '%s%s.vmo'!", basepath.c_str(), filename.c_str());
             delete worldmodel;
             m_modelsLock.release();
-            return NULL;
+            return nullptr;
         }
         //DEBUG_FILTER_LOG(LOG_FILTER_MAP_LOADING, "VMapManager2: loading file '%s%s'.", basepath.c_str(), filename.c_str());
         model = iLoadedModelFiles.insert(std::pair<std::string, ManagedModel>(filename, ManagedModel())).first;
@@ -299,7 +301,7 @@ WorldModel* VMapManager2::acquireModelInstance(const std::string& basepath, cons
     return model->second.getModel();
 }
 
-void VMapManager2::releaseModelInstance(const std::string& filename)
+void VMapManager2::releaseModelInstance(std::string const& filename)
 {
     m_modelsLock.acquire_read();
     ModelFileMap::iterator model = iLoadedModelFiles.find(filename);

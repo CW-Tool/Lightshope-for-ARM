@@ -130,7 +130,7 @@ Unit::Unit()
     m_state = 0;
     m_deathState = ALIVE;
 
-    //m_Aura = NULL;
+    //m_Aura = nullptr;
     //m_AurasCheck = 2000;
     //m_removeAuraTimer = 4;
     m_spellAuraHoldersUpdateIterator = m_spellAuraHolders.end();
@@ -2674,18 +2674,19 @@ float Unit::MeleeMissChanceCalc(const Unit* pVictim, WeaponAttackType attType) c
     }
 
     int32 skillDiff = int32(GetWeaponSkillValue(attType, pVictim)) - int32(pVictim->GetDefenseSkillValue(this));
-
+    float skillDiffBonus = 0.0f;
     // PvP - PvE melee chances
     if (pVictim->GetTypeId() == TYPEID_PLAYER)
-        missChance -= skillDiff * 0.04f;
+        skillDiffBonus = skillDiff * 0.04f;
     else if (skillDiff < -10)
-        missChance -= skillDiff * 0.2f;
+        skillDiffBonus = skillDiff * 0.2f;
     else
-        missChance -= skillDiff * 0.1f;
+        skillDiffBonus = skillDiff * 0.1f;
+    missChance -= skillDiffBonus;
 
     // Low level reduction
-    if (!pVictim->IsPlayer() && pVictim->getLevel() < 10)
-        missChance *= pVictim->getLevel() / 10.0f;
+    float const levelDiffMultiplier = !pVictim->IsPlayer() && pVictim->getLevel() < 10 ? pVictim->getLevel() / 10.0f : 1.0f;
+    missChance *= levelDiffMultiplier;
 
     // Hit chance bonus from attacker based on ratings and auras
     float hitChance = 0.0f;
@@ -2697,10 +2698,23 @@ float Unit::MeleeMissChanceCalc(const Unit* pVictim, WeaponAttackType attType) c
     // There is some code in 1.12 that explicitly adds a modifier that causes the first 1% of +hit gained from
     // talents or gear to be ignored against monsters with more than 10 Defense Skill above the attacking player’s Weapon Skill.
     // https://us.forums.blizzard.com/en/wow/t/bug-hit-tables/185675/33
-    if (skillDiff < -10 && hitChance > 0)
+    if (skillDiff < -10 && hitChance > 0.0f)
         hitChance -= 1.0f;
 
+    // World of Warcraft Client Patch 1.8.0 (2005-10-11)
+    // - Items which provide +hit chance will now be allowed to counteract the 
+    //   increased miss chance penalty of dual - wielding.
+#if SUPPORTED_CLIENT_BUILD <= CLIENT_BUILD_1_7_1
+    float const missChanceWithoutDualWieldPenalty = (5.0f - skillDiffBonus) * levelDiffMultiplier;
+    float const adjustedDualWieldPenalty = missChance - std::max(0.0f, missChanceWithoutDualWieldPenalty);
+#endif
+
     missChance -= hitChance;
+
+#if SUPPORTED_CLIENT_BUILD <= CLIENT_BUILD_1_7_1
+    if ((hitChance > 0.0f) && (adjustedDualWieldPenalty > 0.0f) && IsPlayer())
+        missChance = std::max(missChance, adjustedDualWieldPenalty);
+#endif
 
     // Modify miss chance by victim auras
     if (attType == RANGED_ATTACK)
@@ -2999,6 +3013,11 @@ bool Unit::isInAccessablePlaceFor(Creature const* c) const
         return c->CanSwim();
     else
         return c->CanWalk() || c->CanFly();
+}
+
+bool Unit::IsReachableBySwmming() const
+{
+    return GetTerrain()->IsSwimmable(GetPositionX(), GetPositionY(), GetPositionZ());
 }
 
 bool Unit::IsInWater() const
@@ -3780,7 +3799,7 @@ void Unit::RemoveAurasDueToSpellBySteal(uint32 spellId, ObjectGuid casterGuid, U
             continue;
 
         int32 basePoints = aur->GetBasePoints();
-        // construct the new aura for the attacker - will never return NULL, it's just a wrapper for
+        // construct the new aura for the attacker - will never return nullptr, it's just a wrapper for
         // some different constructors
         Aura * new_aur = CreateAura(aur->GetSpellProto(), aur->GetEffIndex(), &basePoints, new_holder, stealer, this);
 
@@ -4974,7 +4993,7 @@ Player* Unit::GetCharmerOrOwnerPlayerOrPlayerItself() const
     if (guid.IsPlayer())
         return ObjectAccessor::FindPlayer(guid);
 
-    return GetTypeId() == TYPEID_PLAYER ? (Player*)this : NULL;
+    return GetTypeId() == TYPEID_PLAYER ? (Player*)this : nullptr;
 }
 
 Player* Unit::GetAffectingPlayer() const
@@ -5161,7 +5180,7 @@ Totem* Unit::GetTotem(TotemSlot slot) const
         return nullptr;
 
     Creature *totem = GetMap()->GetCreature(m_TotemSlot[slot]);
-    return totem && totem->IsTotem() ? (Totem*)totem : NULL;
+    return totem && totem->IsTotem() ? (Totem*)totem : nullptr;
 }
 
 bool Unit::IsAllTotemSlotsUsed() const
@@ -7099,7 +7118,7 @@ float Unit::ApplyTotalThreatModifier(float threat, SpellSchoolMask schoolMask)
 
 //======================================================================
 
-void Unit::AddThreat(Unit* pVictim, float threat /*= 0.0f*/, bool crit /*= false*/, SpellSchoolMask schoolMask /*= SPELL_SCHOOL_MASK_NONE*/, SpellEntry const *threatSpell /*= NULL*/)
+void Unit::AddThreat(Unit* pVictim, float threat /*= 0.0f*/, bool crit /*= false*/, SpellSchoolMask schoolMask /*= SPELL_SCHOOL_MASK_NONE*/, SpellEntry const *threatSpell /*= nullptr*/)
 {
     // Only mobs can manage threat lists
     if (CanHaveThreatList() && IsInMap(pVictim))
@@ -7184,6 +7203,38 @@ void Unit::TauntFadeOut(Unit *taunter)
 
 //======================================================================
 
+Unit* Unit::GetTauntTarget() const
+{
+    const AuraList& tauntAuras = GetAurasByType(SPELL_AURA_MOD_TAUNT);
+    if (tauntAuras.empty())
+        return nullptr;
+
+    Unit* caster = nullptr;
+
+    // The last taunt aura caster is alive an we are happy to attack him
+    if ((caster = tauntAuras.back()->GetCaster()) && caster->isAlive() && IsValidAttackTarget(caster))
+        return caster;
+    else if (tauntAuras.size() > 1)
+    {
+        // We do not have last taunt aura caster but we have more taunt auras,
+        // so find first available target
+
+        // Auras are pushed_back, last caster will be on the end
+        AuraList::const_iterator aura = --tauntAuras.end();
+        do
+        {
+            --aura;
+            if ((caster = (*aura)->GetCaster()) && caster->IsInMap(this) && caster->isTargetableForAttack())
+            {
+                return caster;
+                break;
+            }
+        } while (aura != tauntAuras.begin());
+    }
+
+    return nullptr;
+}
+
 bool Unit::SelectHostileTarget()
 {
     //function provides main threat functionality
@@ -7203,36 +7254,7 @@ bool Unit::SelectHostileTarget()
     if (ToCreature()->IsTempPacified())
         return false;
 
-    Unit* target = nullptr;
-
-    // First checking if we have some taunt on us
-    const AuraList& tauntAuras = GetAurasByType(SPELL_AURA_MOD_TAUNT);
-    if (!tauntAuras.empty())
-    {
-        Unit* caster;
-
-        // The last taunt aura caster is alive an we are happy to attack him
-        if ((caster = tauntAuras.back()->GetCaster()) && caster->isAlive() && IsValidAttackTarget(caster))
-            return true;
-        else if (tauntAuras.size() > 1)
-        {
-            // We do not have last taunt aura caster but we have more taunt auras,
-            // so find first available target
-
-            // Auras are pushed_back, last caster will be on the end
-            AuraList::const_iterator aura = --tauntAuras.end();
-            do
-            {
-                --aura;
-                if ((caster = (*aura)->GetCaster()) && caster->IsInMap(this) && caster->isTargetableForAttack())
-                {
-                    target = caster;
-                    break;
-                }
-            }
-            while (aura != tauntAuras.begin());
-        }
-    }
+    Unit* target = GetTauntTarget();
 
     // No taunt aura or taunt aura caster is dead, standard target selection
     if (!target && !m_ThreatManager.isThreatListEmpty())
@@ -8139,7 +8161,7 @@ void CharmInfo::SetPetNumber(uint32 petnumber, bool statwindow)
         m_unit->SetUInt32Value(UNIT_FIELD_PETNUMBER, 0);
 }
 
-void CharmInfo::LoadPetActionBar(const std::string& data)
+void CharmInfo::LoadPetActionBar(std::string const& data)
 {
     InitPetActionBar();
 
@@ -8873,7 +8895,7 @@ void Unit::UpdateReactives(uint32 p_time)
     }
 }
 
-Unit* Unit::SelectRandomUnfriendlyTarget(Unit* except /*= NULL*/, float radius /*= ATTACK_DISTANCE*/, bool inFront /*= false*/, bool isValidAttackTarget /*= false*/) const
+Unit* Unit::SelectRandomUnfriendlyTarget(Unit* except /*= nullptr*/, float radius /*= ATTACK_DISTANCE*/, bool inFront /*= false*/, bool isValidAttackTarget /*= false*/) const
 {
     std::list<Unit *> targets;
 
@@ -8911,7 +8933,7 @@ Unit* Unit::SelectRandomUnfriendlyTarget(Unit* except /*= NULL*/, float radius /
     return *tcIter;
 }
 
-Unit* Unit::SelectRandomFriendlyTarget(Unit* except /*= NULL*/, float radius /*= ATTACK_DISTANCE*/, bool inCombat) const
+Unit* Unit::SelectRandomFriendlyTarget(Unit* except /*= nullptr*/, float radius /*= ATTACK_DISTANCE*/, bool inCombat) const
 {
     std::list<Unit *> targets;
 
@@ -9452,7 +9474,7 @@ void Unit::CleanupDeletedAuras()
 SpellAuraHolder* Unit::GetSpellAuraHolder(uint32 spellid) const
 {
     SpellAuraHolderMap::const_iterator itr = m_spellAuraHolders.find(spellid);
-    return itr != m_spellAuraHolders.end() ? itr->second : NULL;
+    return itr != m_spellAuraHolders.end() ? itr->second : nullptr;
 }
 
 SpellAuraHolder* Unit::GetSpellAuraHolder(uint32 spellid, ObjectGuid casterGuid) const
@@ -9726,7 +9748,7 @@ void Unit::GetRandomAttackPoint(const Unit* attacker, float &x, float &y, float 
     y = initialPosY + dist * sin(angle) * normalizedVectXY;
     z = initialPosZ + dist * normalizedVectZ;
 
-    if ((attacker->CanFly() || (attacker->CanSwim() && IsInWater())))
+    if ((attacker->CanFly() || (attacker->CanSwim() && IsReachableBySwmming())))
     {
         GetMap()->GetLosHitPosition(initialPosX, initialPosY, initialPosZ, x, y, z, -0.2f);
         if (attacker->CanFly())
@@ -9925,7 +9947,7 @@ bool Unit::HasProhibitedSpell()
 
 CreatureAI* Unit::AI() const
 {
-    return GetTypeId() == TYPEID_UNIT ? ((Creature*)this)->AI() : NULL;
+    return GetTypeId() == TYPEID_UNIT ? ((Creature*)this)->AI() : nullptr;
 }
 
 SpellAuraHolder* Unit::AddAura(uint32 spellId, uint32 addAuraFlags, Unit* pCaster)
@@ -10257,6 +10279,18 @@ void Unit::RemoveAttackersThreat(Unit* owner)
     }
 }
 
+bool Unit::HasAuraPetShouldAvoidBreaking(Unit* excludeCasterChannel) const
+{
+    // World of Warcraft Client Patch 1.8.0 (2005-10-11)
+    // - Pets no longer break off attacks when their target is affected by Warlock Fear.
+#if SUPPORTED_CLIENT_BUILD <= CLIENT_BUILD_1_7_1
+    if (HasAuraType(SPELL_AURA_MOD_FEAR))
+        return true;
+#endif
+
+    return HasBreakableByDamageCrowdControlAura(excludeCasterChannel);
+}
+
 bool Unit::HasBreakableByDamageAuraType(AuraType type, uint32 excludeAura) const
 {
     AuraList const& auras = GetAurasByType(type);
@@ -10270,7 +10304,7 @@ bool Unit::HasBreakableByDamageAuraType(AuraType type, uint32 excludeAura) const
 bool Unit::HasBreakableByDamageCrowdControlAura(Unit* excludeCasterChannel) const
 {
     uint32 excludeAura = 0;
-    if (Spell* currentChanneledSpell = excludeCasterChannel ? excludeCasterChannel->GetCurrentSpell(CURRENT_CHANNELED_SPELL) : NULL)
+    if (Spell* currentChanneledSpell = excludeCasterChannel ? excludeCasterChannel->GetCurrentSpell(CURRENT_CHANNELED_SPELL) : nullptr)
         excludeAura = currentChanneledSpell->m_spellInfo->Id; //Avoid self interrupt of channeled Crowd Control spells like Seduction
 
     return (HasBreakableByDamageAuraType(SPELL_AURA_MOD_CONFUSE, excludeAura)
