@@ -103,32 +103,12 @@ void PetAI::UpdateAI(const uint32 diff)
         m_updateAlliesTimer -= diff;
 
     // First checking if we have some taunt on us
-    Unit* tauntTarget = NULL;
-    const Unit::AuraList& tauntAuras = m_creature->GetAurasByType(SPELL_AURA_MOD_TAUNT);
-    if (!tauntAuras.empty() && !playerControlled)
-    {
-        Unit* caster = NULL;
-
-        // Auras are pushed_back, last caster will be on the end
-        Unit::AuraList::const_iterator aura = tauntAuras.end();
-        while (aura != tauntAuras.begin())
-        {
-            --aura;
-            caster = (*aura)->GetCaster();
-            if (caster && caster->isTargetableForAttack())
-            {
-                tauntTarget = caster;
-                break;
-            }
-        }
-
-        if (tauntTarget)
-            DoAttack(tauntTarget, true);
-    }
+    Unit* tauntTarget = !playerControlled ? m_creature->GetTauntTarget() : nullptr;
+    if (tauntTarget)
+        DoAttack(tauntTarget, true);
 
     if (m_creature->getVictim() && m_creature->getVictim()->isAlive())
     {
-
         if (_needToStop())
         {
             _stopAttack();
@@ -344,7 +324,7 @@ void PetAI::UpdateAI(const uint32 diff)
 void PetAI::UpdateAllies()
 {
     Unit* owner = m_creature->GetCharmerOrOwner();
-    Group *group = NULL;
+    Group *group = nullptr;
 
     m_updateAlliesTimer = 10 * IN_MILLISECONDS;              //update friendly targets every 10 seconds, lesser checks increase performance
 
@@ -365,7 +345,7 @@ void PetAI::UpdateAllies()
     m_AllySet.insert(m_creature->GetObjectGuid());
     if (group)                                             //add group
     {
-        for (GroupReference *itr = group->GetFirstMember(); itr != NULL; itr = itr->next())
+        for (GroupReference *itr = group->GetFirstMember(); itr != nullptr; itr = itr->next())
         {
             Player* target = itr->getSource();
             if (!target || !group->SameSubGroup((Player*)owner, target))
@@ -451,7 +431,7 @@ void PetAI::OwnerAttacked(Unit* target)
     // Called when owner attacks something. Allows defensive pets to know
     //  that they need to assist
 
-    // Target might be NULL if called from spell with invalid cast targets
+    // Target might be nullptr if called from spell with invalid cast targets
     if (!target)
         return;
 
@@ -483,20 +463,20 @@ Unit* PetAI::SelectNextTarget(bool allowAutoSelect) const
 
     // Pet desactive (monture)
     if (m_creature->IsPet() && !((Pet*)m_creature)->IsEnabled())
-        return NULL;
+        return nullptr;
 
     // Passive pets don't do next target selection
     if (m_creature->HasReactState(REACT_PASSIVE))
-        return NULL;
+        return nullptr;
 
     // Not sure why we wouldn't have an owner but just in case...
     Unit* owner = m_creature->GetCharmerOrOwner();
     if (!owner)
-        return NULL;
+        return nullptr;
 
     // Check owner attackers
     if (Unit* ownerAttacker = owner->getAttackerForHelper())
-        if (!ownerAttacker->HasBreakableByDamageCrowdControlAura() && owner->isInCombat())
+        if (!ownerAttacker->HasAuraPetShouldAvoidBreaking() && owner->isInCombat())
             return ownerAttacker;
 
     // Check owner victim
@@ -510,12 +490,18 @@ Unit* PetAI::SelectNextTarget(bool allowAutoSelect) const
     if (m_creature->HasReactState(REACT_AGGRESSIVE) && allowAutoSelect)
     {
         if (!m_creature->GetCharmInfo()->IsReturning() || m_creature->GetCharmInfo()->IsFollowing() || m_creature->GetCharmInfo()->IsAtStay())
-            if (Unit* nearTarget = m_creature->ToCreature()->SelectNearestHostileUnitInAggroRange(true))
+            // World of Warcraft Client Patch 1.8.0 (2005-10-11)
+            // - Guardians and pets in aggressive mode no longer attack civilians.
+#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_7_1
+            if (Unit* nearTarget = m_creature->ToCreature()->SelectNearestHostileUnitInAggroRange(true, true))
+#else
+            if (Unit* nearTarget = m_creature->ToCreature()->SelectNearestHostileUnitInAggroRange(true, false))
+#endif
                 return nearTarget;
     }
 
     // Default - no valid targets
-    return NULL;
+    return nullptr;
 }
 
 void PetAI::HandleReturnMovement()
@@ -654,7 +640,7 @@ bool PetAI::CanAttack(Unit* target)
         return m_creature->GetCharmInfo()->IsCommandAttack();
 
     // CC - mobs under crowd control can be attacked if owner commanded
-    if (target->HasBreakableByDamageCrowdControlAura())
+    if (target->HasAuraPetShouldAvoidBreaking())
         return m_creature->GetCharmInfo()->IsCommandAttack();
         
     // Returning - pets ignore attacks only if owner clicked follow
@@ -670,7 +656,7 @@ bool PetAI::CanAttack(Unit* target)
     {
         // Check if our owner selected this target and clicked "attack"
         Unit* owner = m_creature->GetCharmerOrOwner();
-        Unit* ownerTarget = NULL;
+        Unit* ownerTarget = nullptr;
         if (owner)
         {
             if (Player* playerOwner = owner->ToPlayer())

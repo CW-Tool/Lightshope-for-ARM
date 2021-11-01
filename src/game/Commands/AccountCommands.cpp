@@ -56,7 +56,7 @@ bool ChatHandler::HandleAccountSetAddonCommand(char* args)
     // Let set addon state only for lesser (strong) security level
     // or to self account
     if (GetAccountId() && GetAccountId() != account_id &&
-        HasLowerSecurityAccount(NULL, account_id, true))
+        HasLowerSecurityAccount(nullptr, account_id, true))
         return false;
 
     uint32 lev;
@@ -74,7 +74,7 @@ bool ChatHandler::HandleAccountSetGmLevelCommand(char* args)
     char* accountStr = ExtractOptNotLastArg(&args);
 
     std::string targetAccountName;
-    Player* targetPlayer = NULL;
+    Player* targetPlayer = nullptr;
     uint32 targetAccountId = ExtractAccountId(&accountStr, &targetAccountName, &targetPlayer);
     if (!targetAccountId)
         return false;
@@ -96,7 +96,7 @@ bool ChatHandler::HandleAccountSetGmLevelCommand(char* args)
 
     /// can set security level only for target with less security and to less security that we have
     /// This is also reject self apply in fact
-    if (HasLowerSecurityAccount(NULL, targetAccountId, true))
+    if (HasLowerSecurityAccount(nullptr, targetAccountId, true))
         return false;
 
     /// account can't set security to same or grater level, need more power GM or console
@@ -137,7 +137,7 @@ bool ChatHandler::HandleAccountSetPasswordCommand(char* args)
 
     /// can set password only for target with less security
     /// This is also reject self apply in fact
-    if (HasLowerSecurityAccount(NULL, targetAccountId, true))
+    if (HasLowerSecurityAccount(nullptr, targetAccountId, true))
         return false;
 
     if (strcmp(szPassword1, szPassword2))
@@ -185,7 +185,7 @@ bool ChatHandler::HandleAccountSetLockedCommand(char* args)
     // Let set locked state only for lesser (strong) security level
     // or to self account
     if (GetAccountId() && GetAccountId() != account_id &&
-        HasLowerSecurityAccount(NULL, account_id, true))
+        HasLowerSecurityAccount(nullptr, account_id, true))
         return false;
 
     uint32 value;
@@ -214,7 +214,7 @@ bool ChatHandler::HandleAccountCharactersCommand(char* args)
 {
     ///- Get the command line arguments
     std::string account_name;
-    Player* target = NULL;                                  // only for triggering use targeted player account
+    Player* target = nullptr;                                  // only for triggering use targeted player account
     uint32 account_id = ExtractAccountId(&args, &account_name, &target);
     if (!account_id)
         return false;
@@ -283,7 +283,7 @@ bool ChatHandler::HandleAccountDeleteCommand(char* args)
     /// Commands not recommended call from chat, but support anyway
     /// can delete only for account with less security
     /// This is also reject self apply in fact
-    if (HasLowerSecurityAccount (NULL, account_id, true))
+    if (HasLowerSecurityAccount (nullptr, account_id, true))
         return false;
 
     AccountOpResult result = sAccountMgr.DeleteAccount(account_id);
@@ -319,6 +319,12 @@ bool ChatHandler::HandleAccountOnlineListCommand(char* args)
     ///- Get the list of accounts ID logged to the realm
     //                                                 0   1         2        3        4
     QueryResult *result = LoginDatabase.PQuery("SELECT id, username, last_ip, gmlevel, expansion FROM account WHERE current_realm = %u LIMIT %u", realmID, limit);
+    if (!result)
+    {
+        SendSysMessage(LANG_ACCOUNT_LIST_EMPTY);
+        SetSentErrorMessage(true);
+        return false;
+    }
 
     uint32 count = 0;
     AccountSearchHandler::ShowAccountListHelper(result, *this, count, limit, true);
@@ -421,7 +427,7 @@ bool ChatHandler::HandleAccountPasswordCommand(char* args)
 bool ChatHandler::HandleAddCharacterNoteCommand(char* args)
 {
     ObjectGuid playerGuid;
-    if (!ExtractPlayerTarget(&args, NULL, &playerGuid))
+    if (!ExtractPlayerTarget(&args, nullptr, &playerGuid))
     {
         PSendSysMessage(LANG_PLAYER_NOT_FOUND);
         SetSentErrorMessage(true);
@@ -448,7 +454,7 @@ bool ChatHandler::HandleAddCharacterNoteCommand(char* args)
 bool ChatHandler::HandleWarnCharacterCommand(char* args)
 {
     ObjectGuid playerGuid;
-    if (!ExtractPlayerTarget(&args, NULL, &playerGuid))
+    if (!ExtractPlayerTarget(&args, nullptr, &playerGuid))
     {
         PSendSysMessage(LANG_PLAYER_NOT_FOUND);
         SetSentErrorMessage(true);
@@ -738,7 +744,7 @@ bool ChatHandler::HandleBanInfoCharacterCommand(char* args)
 {
     Player* target;
     ObjectGuid target_guid;
-    if (!ExtractPlayerTarget(&args, &target, &target_guid,NULL,true))
+    if (!ExtractPlayerTarget(&args, &target, &target_guid,nullptr,true))
         return false;
 
     uint32 accountid = target ? target->GetSession()->GetAccountId() : sObjectMgr.GetPlayerAccountIdByGUID(target_guid);
@@ -772,7 +778,7 @@ bool ChatHandler::HandleBanInfoHelper(uint32 accountid, char const* accountname)
 
         time_t unbandate = time_t(fields[3].GetUInt64());
         bool active = false;
-        if (fields[2].GetBool() && (fields[1].GetUInt64() == (uint64)0 || unbandate >= time(NULL)))
+        if (fields[2].GetBool() && (fields[1].GetUInt64() == (uint64)0 || unbandate >= time(nullptr)))
             active = true;
         bool permanent = (fields[1].GetUInt64() == (uint64)0);
         uint32 reqGmLevel = fields[6].GetUInt8();
@@ -1032,7 +1038,7 @@ bool ChatHandler::HandleBanListIPCommand(char* args)
 
 bool ChatHandler::HandleAnticheatCommand(char* args)
 {
-    Player* player = NULL;
+    Player* player = nullptr;
     if (!ExtractPlayerTarget(&args, &player) && m_session)
         player = m_session->GetPlayer();
     if (!player)
@@ -1060,7 +1066,7 @@ bool ChatHandler::HandleListAddonsCommand(char* args)
 
 bool ChatHandler::HandleClientInfosCommand(char* args)
 {
-    Player* player = NULL;
+    Player* player = nullptr;
     if (!ExtractPlayerTarget(&args, &player) && m_session)
         player = m_session->GetPlayer();
     if (!player)
@@ -1183,7 +1189,7 @@ bool ChatHandler::HandleMuteCommand(char* args)
     if (HasLowerSecurity(target, target_guid, true))
         return false;
 
-    time_t mutetime = time(NULL) + notspeaktime * MINUTE;
+    time_t mutetime = time(nullptr) + notspeaktime * MINUTE;
 
     if (target)
         target->GetSession()->m_muteTime = mutetime;

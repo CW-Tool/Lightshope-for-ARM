@@ -165,7 +165,7 @@ void WorldSession::HandleCreatureQueryOpcode(WorldPacket & recv_data)
 
     Creature *unit = _player->GetMap()->GetAnyTypeCreature(guid);
 
-    //if (unit == NULL)
+    //if (unit == nullptr)
     //    sLog.outDebug( "WORLD: HandleCreatureQueryOpcode - (%u) NO SUCH UNIT! (GUID: %u, ENTRY: %u)", uint32(GUID_LOPART(guid)), guid, entry );
 
     CreatureInfo const *ci = ObjectMgr::GetCreatureTemplate(entry);
@@ -195,7 +195,11 @@ void WorldSession::HandleCreatureQueryOpcode(WorldPacket & recv_data)
         data << Name;
         data << uint8(0) << uint8(0) << uint8(0);           // name2, name3, name4, always empty
         data << SubName;
+#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_10_2
         data << uint32(ci->type_flags);                     // flags
+#else
+        data << uint32(ci->type_flags << 20);               // flags
+#endif
         data << uint32(ci->type);
 
         data << uint32(ci->beast_family);                   // CreatureFamily.dbc
@@ -461,6 +465,6 @@ void WorldSession::HandlePageTextQueryOpcode(WorldPacket & recv_data)
 void WorldSession::SendQueryTimeResponse()
 {
     WorldPacket data(SMSG_QUERY_TIME_RESPONSE, 4);
-    data << uint32(time(NULL));
+    data << uint32(time(nullptr));
     SendPacket(&data);
 }

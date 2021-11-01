@@ -61,7 +61,7 @@ class GuildMgr
             std::map<uint32, uint32>::iterator it = m_guid2guild.find(lowguid);
             if (it != m_guid2guild.end())
                 return GetGuildById(it->second);
-            return NULL;
+            return nullptr;
         }
 
         void CreatePetition(uint32 id, Player* player, const ObjectGuid& charterGuid, std::string& name);
@@ -101,7 +101,7 @@ public:
     uint32 GetId() const { return m_id; }
     const ObjectGuid& GetCharterGuid() { return m_charterGuid; }
     const ObjectGuid& GetOwnerGuid() { return m_ownerGuid; }
-    const std::string& GetName() { return m_name; }
+    std::string const& GetName() { return m_name; }
     Team GetTeam() const { return m_team; }
     void SetTeam(Team team) { m_team = team; }
 

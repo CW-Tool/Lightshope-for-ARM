@@ -66,12 +66,12 @@ class ChatCommand
 public:
         CommandServer      server;
         const char *       Name;
-        uint32             SecurityLevel;                   // function pointer required correct align (use uint32)
+        uint8              SecurityLevel;                   // function pointer required correct align (use uint32)
         bool               AllowConsole;
         bool (ChatHandler::*Handler)(char* args);
         std::string        Help;
         ChatCommand *      ChildCommands;
-        uint32             Flags;
+        uint8              Flags;
         std::string        FullName;
 };
 
@@ -172,7 +172,7 @@ class MANGOS_DLL_SPEC ChatHandler
         void ForwardCommandToNode();
         void ForwardCommandToMaster();
 
-        bool SetDataForCommandInTable(ChatCommand *table, const char* text, uint32 security, std::string const& help, uint32 flags);
+        bool SetDataForCommandInTable(ChatCommand *table, const char* text, uint8 security, std::string const& help, uint8 flags);
         void ExecuteCommand(const char* text);
         bool ShowHelpForCommand(ChatCommand *table, const char* cmd);
         bool ShowHelpForSubCommands(ChatCommand *table, char const* cmd);
@@ -467,6 +467,8 @@ class MANGOS_DLL_SPEC ChatHandler
         bool HandleGameObjectSelectCommand(char* args);
         bool HandleGameObjectRespawnCommand(char* args);
         bool HandleGameObjectInfoCommand(char* args);
+        bool HandleGameObjectSetGoStateCommand(char* args);
+        bool HandleGameObjectSetLootStateCommand(char* args);
         GameObject* getSelectedGameObject();
 
         bool HandleGMCommand(char* args);
@@ -606,6 +608,7 @@ class MANGOS_DLL_SPEC ChatHandler
 
         //-----------------------Npc Commands-----------------------
         bool HandleNpcAddCommand(char* args);
+        bool HandleNpcAddEntryCommand(char* args);
         bool HandleNpcAddWeaponCommand(char* args);
         bool HandleNpcSummonCommand(char* args);
         bool HandleNpcAddVendorItemCommand(char* args);
@@ -827,6 +830,7 @@ class MANGOS_DLL_SPEC ChatHandler
         bool HandleDieCommand(char* args);
         bool HandleFearCommand(char* args);
         bool HandleDamageCommand(char* args);
+        bool HandleAoEDamageCommand(char* args);
         bool HandleReviveCommand(char* args);
         bool HandleReplenishCommand(char* args);
         bool HandleModifyMorphCommand(char* args);
@@ -987,7 +991,7 @@ class MANGOS_DLL_SPEC ChatHandler
 
         void SetSentErrorMessage(bool val){ sentErrorMessage = val;};
     private:
-        WorldSession * m_session;                           // != NULL for chat command call and NULL for CLI command
+        WorldSession * m_session;                           // != nullptr for chat command call and nullptr for CLI command
 
         // common global flag
         static bool load_command_table;

@@ -13,7 +13,7 @@ void MasterPlayer::UpdateSpeakTime()
     if (GetSession()->GetSecurity() > SEC_PLAYER)
         return;
 
-    time_t current = time(NULL);
+    time_t current = time(nullptr);
     if (m_speakTime > current)
     {
         uint32 max_count = sWorld.getConfig(CONFIG_UINT32_CHATFLOOD_MESSAGE_COUNT);
@@ -38,7 +38,7 @@ void MasterPlayer::UpdateSpeakTime()
 }
 
 
-void MasterPlayer::Whisper(const std::string& text, uint32 language, MasterPlayer* receiver)
+void MasterPlayer::Whisper(std::string const& text, uint32 language, MasterPlayer* receiver)
 {
     if (language != LANG_ADDON)                             // if not addon data
         language = LANG_UNIVERSAL;                          // whispers should always be readable

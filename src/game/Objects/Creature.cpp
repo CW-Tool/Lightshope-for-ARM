@@ -266,7 +266,7 @@ void Creature::RemoveCorpse()
 /**
  * change the entry of creature until respawn
  */
-bool Creature::InitEntry(uint32 Entry, Team team, CreatureData const* data /*=NULL*/, GameEventCreatureData const* eventData /*=NULL*/)
+bool Creature::InitEntry(uint32 Entry, Team team, CreatureData const* data /*=nullptr*/, GameEventCreatureData const* eventData /*=nullptr*/)
 {
     // use game event entry if any instead default suggested
     if (eventData && eventData->entry_id)
@@ -359,8 +359,8 @@ bool Creature::InitEntry(uint32 Entry, Team team, CreatureData const* data /*=NU
     if (data)
         m_startwaypoint = data->currentwaypoint;
 
-    // checked at loading
-    m_defaultMovementType = MovementGeneratorType(cinfo->movement_type);
+    if (!data)
+        m_defaultMovementType = MovementGeneratorType(cinfo->movement_type);
 
     return true;
 }
@@ -423,7 +423,7 @@ void Creature::UnloadCreatureAddon(const CreatureDataAddon* data)
     }
 }
 
-bool Creature::UpdateEntry(uint32 Entry, Team team, const CreatureData *data /*=NULL*/, GameEventCreatureData const* eventData /*=NULL*/, bool preserveHPAndPower /*=true*/)
+bool Creature::UpdateEntry(uint32 Entry, Team team, const CreatureData *data /*=nullptr*/, GameEventCreatureData const* eventData /*=nullptr*/, bool preserveHPAndPower /*=true*/)
 {
     bool addonReload = false;
 
@@ -552,7 +552,7 @@ bool Creature::UpdateEntry(uint32 Entry, Team team, const CreatureData *data /*=
     return true;
 }
 
-uint32 Creature::ChooseDisplayId(const CreatureInfo *cinfo, const CreatureData *data /*= NULL*/, GameEventCreatureData const* eventData /*=NULL*/)
+uint32 Creature::ChooseDisplayId(const CreatureInfo *cinfo, const CreatureData *data /*= nullptr*/, GameEventCreatureData const* eventData /*=nullptr*/)
 {
     // Use creature event model explicit, override any other static models
     if (eventData && eventData->modelid)
@@ -613,11 +613,18 @@ void Creature::Update(uint32 update_diff, uint32 diff)
                 // Clear possible auras having IsDeathPersistent() attribute
                 RemoveAllAuras();
 
-                if (m_originalEntry != GetEntry())
+                // pick a new creature id if db spawn has multiple
+                CreatureData const* dbSpawnData = GetCreatureData();
+                uint32 const newCreatureId = dbSpawnData ? dbSpawnData->ChooseCreatureId() : m_originalEntry;
+
+                if (newCreatureId != m_originalEntry)
+                    m_originalEntry = newCreatureId;
+
+                if (newCreatureId != GetEntry())
                 {
-                    // need preserver gameevent state
+                    // need to preserve game event state
                     GameEventCreatureData const* eventData = sGameEventMgr.GetCreatureUpdateDataForActiveEvent(GetGUIDLow());
-                    UpdateEntry(m_originalEntry, TEAM_NONE, nullptr, eventData);
+                    UpdateEntry(newCreatureId, TEAM_NONE, dbSpawnData, eventData);
                 }
 
                 CreatureInfo const *cinfo = GetCreatureInfo();
@@ -1019,11 +1026,11 @@ bool Creature::AIM_Initialize()
     return true;
 }
 
-bool Creature::Create(uint32 guidlow, CreatureCreatePos& cPos, CreatureInfo const* cinfo, Team team /*= TEAM_NONE*/, const CreatureData *data /*= NULL*/, GameEventCreatureData const* eventData /*= NULL*/)
+bool Creature::Create(uint32 guidlow, CreatureCreatePos& cPos, CreatureInfo const* cinfo, Team team, uint32 firstCreatureId, const CreatureData *data /*= nullptr*/, GameEventCreatureData const* eventData /*= nullptr*/)
 {
     SetMap(cPos.GetMap());
 
-    if (!CreateFromProto(guidlow, cinfo, team, data, eventData))
+    if (!CreateFromProto(guidlow, cinfo, team, firstCreatureId, data, eventData))
         return false;
 
     cPos.SelectFinalPoint(this);
@@ -1247,7 +1254,7 @@ bool Creature::CanTrainAndResetTalentsOf(Player* pPlayer) const
  */
 Player* Creature::GetOriginalLootRecipient() const
 {
-    return m_lootRecipientGuid ? ObjectAccessor::FindPlayer(m_lootRecipientGuid) : NULL;
+    return m_lootRecipientGuid ? ObjectAccessor::FindPlayer(m_lootRecipientGuid) : nullptr;
 }
 
 /**
@@ -1256,7 +1263,7 @@ Player* Creature::GetOriginalLootRecipient() const
 Group* Creature::GetGroupLootRecipient() const
 {
     // original recipient group if set and not disbanded
-    return m_lootGroupRecipientId ? sObjectMgr.GetGroupById(m_lootGroupRecipientId) : NULL;
+    return m_lootGroupRecipientId ? sObjectMgr.GetGroupById(m_lootGroupRecipientId) : nullptr;
 }
 
 /**
@@ -1299,7 +1306,7 @@ void Creature::SetLootRecipient(Unit *unit)
 {
     // set the player whose group should receive the right
     // to loot the creature after it dies
-    // should be set to NULL after the loot disappears
+    // should be set to nullptr after the loot disappears
 
     if (!unit)
     {
@@ -1385,7 +1392,7 @@ void Creature::SaveToDB(uint32 mapid)
     }
 
     // data->guid = guid don't must be update at save
-    data.id = GetEntry();
+    data.creature_id[0] = GetEntry();
     data.mapid = mapid;
     data.modelid_override = displayId;
     data.equipmentId = GetEquipmentId();
@@ -1398,8 +1405,6 @@ void Creature::SaveToDB(uint32 mapid)
     // prevent add data integrity problems
     data.spawndist = GetDefaultMovementType() == IDLE_MOTION_TYPE ? 0 : m_respawnradius;
     data.currentwaypoint = 0;
-    data.curhealth = GetHealth();
-    data.curmana = GetPower(POWER_MANA);
     data.is_dead = m_isDeadByDefault;
     // prevent add data integrity problems
     data.movementType = !m_respawnradius && GetDefaultMovementType() == RANDOM_MOTION_TYPE
@@ -1417,7 +1422,10 @@ void Creature::SaveToDB(uint32 mapid)
     std::ostringstream ss;
     ss << "INSERT INTO creature VALUES ("
        << GetGUIDLow() << ","
-       << GetEntry() << ","
+       << data.creature_id[0] << ","
+       << data.creature_id[1] << ","
+       << data.creature_id[2] << ","
+       << data.creature_id[3] << ","
        << mapid << ","
        << displayId << ","
        << GetEquipmentId() << ","
@@ -1427,9 +1435,9 @@ void Creature::SaveToDB(uint32 mapid)
        << GetOrientation() << ","
        << data.spawntimesecsmin << ","                     // respawn time minimum
        << data.spawntimesecsmax << ","                     // respawn time maximum
-       << spawndist << ","                                 // spawn distance
+       << spawndist << ","                                 // wander distance
        << (uint32)(0) << ","                               // currentwaypoint
-       << GetHealthPercent() << ","                        // curhealth
+       << data.curhealth << ","                            // curhealth
        << curmana << ","                                   // curmana
        << (m_isDeadByDefault ? 1 : 0) << ","               // is_dead
        << GetDefaultMovementType() << ","                  // default movement generator type
@@ -1558,12 +1566,12 @@ float Creature::GetSpellDamageMod(int32 Rank)
     }
 }
 
-bool Creature::CreateFromProto(uint32 guidlow, CreatureInfo const* cinfo, Team team, const CreatureData *data /*=NULL*/, GameEventCreatureData const* eventData /*=NULL*/)
+bool Creature::CreateFromProto(uint32 guidlow, CreatureInfo const* cinfo, Team team, uint32 firstCreatureId, const CreatureData *data /*=nullptr*/, GameEventCreatureData const* eventData /*=nullptr*/)
 {
     SetZoneScript();
     m_originalEntry = cinfo->entry;
 
-    Object::_Create(guidlow, cinfo->entry, cinfo->GetHighGuid());
+    Object::_Create(guidlow, firstCreatureId, cinfo->GetHighGuid());
 
     SetWalk(true, true);
 
@@ -1585,10 +1593,11 @@ bool Creature::LoadFromDB(uint32 guidlow, Map *map)
     if (data->spawnFlags & SPAWN_FLAG_DISABLED)
         return false;
 
-    CreatureInfo const *cinfo = ObjectMgr::GetCreatureTemplate(data->id);
+    uint32 const creatureId = data->ChooseCreatureId();
+    CreatureInfo const *cinfo = ObjectMgr::GetCreatureTemplate(creatureId);
     if (!cinfo)
     {
-        sLog.outErrorDb("Creature (Entry: %u) not found in table `creature_template`, can't load. ", data->id);
+        sLog.outErrorDb("Creature (Entry: %u) not found in table `creature_template`, can't load. ", creatureId);
         return false;
     }
 
@@ -1601,7 +1610,7 @@ bool Creature::LoadFromDB(uint32 guidlow, Map *map)
     CreatureCreatePos pos(map, data->posX, data->posY, data->posZ, data->orientation);
     SetHomePosition(data->posX, data->posY, data->posZ, data->orientation);
 
-    if (!Create(guidlow, pos, cinfo, TEAM_NONE, data, eventData))
+    if (!Create(guidlow, pos, cinfo, TEAM_NONE, data->creature_id[0], data, eventData))
         return false;
 
     m_respawnradius = data->spawndist;
@@ -1631,13 +1640,14 @@ bool Creature::LoadFromDB(uint32 guidlow, Map *map)
         GetMap()->GetPersistentState()->SaveCreatureRespawnTime(GetGUIDLow(), 0);
     }
 
-    uint32 curhealth = data->curhealth;
+    uint32 curhealth = cinfo->health_max * data->curhealth / 100.0f;
     if (curhealth)
     {
         curhealth = uint32(curhealth * _GetHealthMod(GetCreatureInfo()->rank));
         if (curhealth < 1)
             curhealth = 1;
     }
+    uint32 curmana = cinfo->mana_max * data->curmana / 100.0f;
 
     if (sCreatureLinkingMgr.IsSpawnedByLinkedMob(this))
     {
@@ -1657,7 +1667,7 @@ bool Creature::LoadFromDB(uint32 guidlow, Map *map)
     }
 
     SetHealth(m_deathState == ALIVE ? curhealth : 0);
-    SetPower(POWER_MANA, data->curmana);
+    SetPower(POWER_MANA, curmana);
 
     // checked at creature_template loading
     m_defaultMovementType = MovementGeneratorType(data->movementType);
@@ -1668,6 +1678,10 @@ bool Creature::LoadFromDB(uint32 guidlow, Map *map)
 
     if (data->spawnFlags & SPAWN_FLAG_NOT_VISIBLE)
         SetVisibility(VISIBILITY_OFF);
+
+    // We need to assign new AI on respawn if spawn has multiple creature ids
+    if (data->GetCreatureIdCount() > 1)
+        m_AI_InitializeOnRespawn = true;
 
     return true;
 }
@@ -2046,7 +2060,7 @@ bool Creature::IsImmuneToSpellEffect(SpellEntry const *spellInfo, SpellEffectInd
     return Unit::IsImmuneToSpellEffect(spellInfo, index, castOnSelf);
 }
 
-bool Creature::IsVisibleInGridForPlayer(Player* pl) const
+bool Creature::IsVisibleInGridForPlayer(Player const* pl) const
 {
     // gamemaster in GM mode see all, including ghosts
     if (pl->IsGameMaster())
@@ -2345,13 +2359,6 @@ CreatureDataAddon const* Creature::GetCreatureAddon() const
 CreatureData const* Creature::GetCreatureData() const
 {
     return sObjectMgr.GetCreatureData(GetDBTableGUIDLow());
-}
-
-uint32 Creature::GetDBTableEntry() const
-{
-    if (CreatureData const* data = GetCreatureData())
-        return data->id;
-    return 0;
 }
 
 //creature_addon table
@@ -2890,19 +2897,6 @@ void Creature::AllLootRemovedFromCorpse()
     }
 }
 
-uint32 Creature::GetLevelForTarget(Unit const* target) const
-{
-    if (!IsWorldBoss())
-        return Unit::GetLevelForTarget(target);
-
-    uint32 level = target->getLevel() + sWorld.getConfig(CONFIG_UINT32_WORLD_BOSS_LEVEL_DIFF);
-    if (level < 1)
-        return 1;
-    if (level > 255)
-        return 255;
-    return level;
-}
-
 std::string Creature::GetAIName() const
 {
     return ObjectMgr::GetCreatureTemplate(GetEntry())->ai_name;
@@ -2926,7 +2920,7 @@ VendorItemData const* Creature::GetVendorItems() const
 VendorItemData const* Creature::GetVendorTemplateItems() const
 {
     uint32 vendorId = GetCreatureInfo()->vendor_id;
-    return vendorId ? sObjectMgr.GetNpcVendorTemplateItemList(vendorId) : NULL;
+    return vendorId ? sObjectMgr.GetNpcVendorTemplateItemList(vendorId) : nullptr;
 }
 
 uint32 Creature::GetVendorItemCurrentCount(VendorItem const* vItem)
@@ -3011,7 +3005,7 @@ uint32 Creature::UpdateVendorItemCurrentCount(VendorItem const* vItem, uint32 us
 TrainerSpellData const* Creature::GetTrainerTemplateSpells() const
 {
     uint32 trainerId = GetCreatureInfo()->trainer_id;
-    return trainerId ? sObjectMgr.GetNpcTrainerTemplateSpells(trainerId) : NULL;
+    return trainerId ? sObjectMgr.GetNpcTrainerTemplateSpells(trainerId) : nullptr;
 }
 
 TrainerSpellData const* Creature::GetTrainerSpells() const
@@ -3379,7 +3373,7 @@ Unit* Creature::SelectNearestTargetInAttackDistance(float dist) const
     return target;
 }
 
-Unit* Creature::SelectNearestHostileUnitInAggroRange(bool useLOS) const
+Unit* Creature::SelectNearestHostileUnitInAggroRange(bool useLOS, bool ignoreCivilians) const
 {
     // Selects nearest hostile target within creature's aggro range. Used primarily by
     //  pets set to aggressive. Will not return neutral or friendly targets.
@@ -3389,7 +3383,7 @@ Unit* Creature::SelectNearestHostileUnitInAggroRange(bool useLOS) const
 
     Unit *target = nullptr;
 
-    MaNGOS::NearestHostileUnitInAggroRangeCheck u_check(ToCreature(), useLOS);
+    MaNGOS::NearestHostileUnitInAggroRangeCheck u_check(ToCreature(), useLOS, ignoreCivilians);
     MaNGOS::UnitLastSearcher<MaNGOS::NearestHostileUnitInAggroRangeCheck> searcher(target, u_check);
 
     TypeContainerVisitor<MaNGOS::UnitLastSearcher<MaNGOS::NearestHostileUnitInAggroRangeCheck>, WorldTypeMapContainer > world_unit_searcher(searcher);

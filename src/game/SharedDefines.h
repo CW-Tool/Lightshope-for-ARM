@@ -212,6 +212,12 @@ inline SpellSchools GetFirstSchoolInMask(SpellSchoolMask mask)
     return SPELL_SCHOOL_NORMAL;
 }
 
+enum SpellVisualKit
+{
+    SPELL_VISUAL_KIT_FOOD           = 406,
+    SPELL_VISUAL_KIT_DRINK          = 438
+};
+
 enum ItemQualities
 {
     ITEM_QUALITY_POOR                  = 0,                 // GREY
@@ -783,11 +789,13 @@ enum SpellCastResult
     SPELL_FAILED_ONLY_BATTLEGROUNDS                   , // Can only use in battlegrounds
     SPELL_FAILED_TARGET_NOT_GHOST                     , // Target is not a ghost
     SPELL_FAILED_TOO_MANY_SKILLS                      , // Your pet can't learn any more skills
+#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_7_1
     SPELL_FAILED_TRANSFORM_UNUSABLE                   , // You can't use the new item
     SPELL_FAILED_WRONG_WEATHER                        , // The weather isn't right for that
     SPELL_FAILED_DAMAGE_IMMUNE                        , // You can't do that while you are immune
     SPELL_FAILED_PREVENTED_BY_MECHANIC                , // Can't do that while %s
     SPELL_FAILED_PLAY_TIME                            , // Maximum play time exceeded
+#endif
 #if SUPPORTED_CLIENT_BUILD >= CLIENT_BUILD_1_9_4
     SPELL_FAILED_REPUTATION                           , // Your reputation isn't high enough
 #endif
@@ -1760,22 +1768,13 @@ enum CreatureFamily
 
 enum CreatureTypeFlags
 {
-    CREATURE_TYPEFLAGS_TAMEABLE         = 0x00000001,       // Tameable by any hunter
-    CREATURE_TYPEFLAGS_GHOST_VISIBLE    = 0x00000002,       // Creatures which can _also_ be seen when player is a ghost, used in CanInteract function by client, can't be attacked
-    CREATURE_TYPEFLAGS_BOSS             = 0x00000004,       // "BOSS" flag for tooltips
-    CREATURE_TYPEFLAGS_NO_WOUND_ANIM    = 0x00000008,       // disables "wounded" animations at spell taken
-    CREATURE_TYPEFLAGS_UNK5             = 0x00000010,       // controls something in client tooltip related to creature faction
-    CREATURE_TYPEFLAGS_UNK6             = 0x00000020,       // may be sound related
-    CREATURE_TYPEFLAGS_UNK7             = 0x00000040,       // may be related to attackable / not attackable creatures with spells, used together with lua_IsHelpfulSpell/lua_IsHarmfulSpell
-    CREATURE_TYPEFLAGS_DEAD_INTERACT    = 0x00000080,       // Player can interact with the creature if its dead (not player dead)
-    CREATURE_TYPEFLAGS_HERBLOOT         = 0x00000100,       // Can be looted by herbalist
-    CREATURE_TYPEFLAGS_MININGLOOT       = 0x00000200,       // Can be looted by miner
-    CREATURE_TYPEFLAGS_UNK11            = 0x00000400,       // no idea, but it used by client
-    CREATURE_TYPEFLAGS_MOUNTED_COMBAT   = 0x00000800,       // Creature can remain mounted when entering combat
-    CREATURE_TYPEFLAGS_CAN_ASSIST       = 0x00001000,       // Can aid any player (and group) in combat. Typically seen for escorting NPC's
-    CREATURE_TYPEFLAGS_UNK14            = 0x00002000,       // checked from calls in Lua_PetHasActionBar
-    CREATURE_TYPEFLAGS_UNK15            = 0x00004000,       // Lua_UnitGUID, client does guid_low &= 0xFF000000 if this flag is set
-    CREATURE_TYPEFLAGS_ENGINEERLOOT     = 0x00008000,       // Can be looted by engineer
+    CREATURE_TYPEFLAGS_TAMEABLE             = 0x00000001,       // Tameable by any hunter
+    CREATURE_TYPEFLAGS_GHOST_VISIBLE        = 0x00000002,       // Creatures which can _also_ be seen when player is a ghost, used in CanInteract function by client, can't be attacked
+    CREATURE_TYPEFLAGS_BOSS                 = 0x00000004,       // Changes creature's visible level to "??" in the creature's portrait
+    CREATURE_TYPEFLAGS_NO_WOUND_ANIM        = 0x00000008,       // Disables "wounded" animations at spell taken
+    CREATURE_TYPEFLAGS_HIDE_FACTION_TOOLTIP = 0x00000010,       // Controls something in client tooltip related to creature faction
+    CREATURE_TYPEFLAGS_UNK6                 = 0x00000020,       // May be sound related
+    CREATURE_TYPEFLAGS_SPELL_ATTACKABLE     = 0x00000040,       // May be related to attackable / not attackable creatures with spells, used together with lua_IsHelpfulSpell/lua_IsHarmfulSpell
 };
 
 enum CreatureEliteType

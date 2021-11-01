@@ -692,7 +692,7 @@ class MANGOS_DLL_SPEC PlayerTaxi
         void AppendTaximaskTo(ByteBuffer& data, bool all);
 
         // Destinations
-        bool LoadTaxiDestinationsFromString(const std::string& values, Team team);
+        bool LoadTaxiDestinationsFromString(std::string const& values, Team team);
         std::string SaveTaxiDestinationsToString() const;
 
         void ClearTaxiDestinations()
@@ -882,7 +882,7 @@ class MANGOS_DLL_SPEC Player final: public Unit
         static UpdateMask updateVisualBits;
         static void InitVisibleBits();
 
-        bool Create(uint32 guidlow, const std::string& name, uint8 race, uint8 class_, uint8 gender, uint8 skin, uint8 face, uint8 hairStyle, uint8 hairColor, uint8 facialHair);
+        bool Create(uint32 guidlow, std::string const& name, uint8 race, uint8 class_, uint8 gender, uint8 skin, uint8 face, uint8 hairStyle, uint8 hairColor, uint8 facialHair);
         void Update(uint32 update_diff, uint32 time) override;
         static bool BuildEnumData(QueryResult* result,  WorldPacket* p_data);
 
@@ -1452,9 +1452,6 @@ class MANGOS_DLL_SPEC Player final: public Unit
 
         std::vector<ItemSetEffect*> m_ItemSetEff;
 
-        void SetLastCastedSpell(uint32 spell_id, bool byclient);
-        uint32 GetLastCastedSpell(bool byclientonly);
-
         /*********************************************************/
         /***                   TALENT SYSTEM                   ***/
         /*********************************************************/
@@ -1493,10 +1490,12 @@ class MANGOS_DLL_SPEC Player final: public Unit
         bool m_canDualWield;
         float m_ammoDPS;
         float m_personalXpRate;
+        uint32 m_foodEmoteTimer;
 
         void RegenerateAll();
         void Regenerate(Powers power);
         void RegenerateHealth();
+        void HandleFoodEmotes(uint32 diff);
 
         static float GetHealthBonusFromStamina(float stamina);
         static float GetManaBonusFromIntellect(float intellect);
@@ -1823,7 +1822,7 @@ class MANGOS_DLL_SPEC Player final: public Unit
 
         bool IsInVisibleList(WorldObject const* u) const;
         bool IsInVisibleList_Unsafe(WorldObject const* u) const { return this == u || m_visibleGUIDs.find(u->GetObjectGuid()) != m_visibleGUIDs.end(); }
-        bool IsVisibleInGridForPlayer(Player* pl) const;
+        bool IsVisibleInGridForPlayer(Player const* pl) const override;
         bool IsVisibleGloballyFor(Player* pl) const;
         void UpdateVisibilityOf(WorldObject const* viewPoint, WorldObject* target);
         template<class T>
@@ -2080,8 +2079,11 @@ class MANGOS_DLL_SPEC Player final: public Unit
         void Mount(uint32 mount, uint32 spellId = 0) override;
         void Unmount(bool from_aura = false) override;
 
+        bool CanInteractWithQuestGiver(Object* questGiver) const;
         Creature* GetNPCIfCanInteractWith(ObjectGuid guid, uint32 npcflagmask) const;
+        bool CanInteractWithNPC(Creature* pCreature, uint32 npcflagmask) const;
         GameObject* GetGameObjectIfCanInteractWith(ObjectGuid guid, uint32 gameobject_type = MAX_GAMEOBJECT_TYPE) const;
+        bool CanInteractWithGameObject(GameObject* pGo, uint32 gameobject_type = MAX_GAMEOBJECT_TYPE) const;
 
         ObjectGuid const& GetSelectedGobj() const { return m_selectedGobj; }
         void SetSelectedGobj(ObjectGuid guid) { m_selectedGobj = guid; }
@@ -2168,9 +2170,9 @@ class MANGOS_DLL_SPEC Player final: public Unit
         uint8 GetChatTag() const;
 
         float GetYellRange() const;
-        void Say(const std::string& text, const uint32 language) const;
-        void Yell(const std::string& text, const uint32 language) const;
-        void TextEmote(const std::string& text) const;
+        void Say(std::string const& text, const uint32 language) const;
+        void Yell(std::string const& text, const uint32 language) const;
+        void TextEmote(std::string const& text) const;
 
         /*********************************************************/
         /***                   FACTION SYSTEM                  ***/
@@ -2452,7 +2454,7 @@ class MANGOS_DLL_SPEC Player final: public Unit
         Player* GetNextRandomRaidMember(float radius);
         PartyResult CanUninviteFromGroup(ObjectGuid uninvitedGuid) const;
         void UpdateGroupLeaderFlag(const bool remove = false);
-        bool IsGroupVisibleFor(Player* p) const;
+        bool IsGroupVisibleFor(Player const* p) const;
         bool IsInSameGroupWith(Player const* p) const;
         bool IsInSameRaidWith(Player const* p) const { return p == this || (GetGroup() != nullptr && GetGroup() == p->GetGroup()); }
         void UninviteFromGroup();

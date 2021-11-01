@@ -141,7 +141,7 @@ bool IsEnabledOnMap<Creature>(Map* map, uint32 guid)
 template <class T>
 void LoadHelper(CellGuidSet const& guid_set, CellPair &cell, GridRefManager<T> &m, uint32 &count, Map* map, GridType& grid)
 {
-    BattleGround* bg = map->IsBattleGround() ? ((BattleGroundMap*)map)->GetBG() : NULL;
+    BattleGround* bg = map->IsBattleGround() ? ((BattleGroundMap*)map)->GetBG() : nullptr;
 
     for (CellGuidSet::const_iterator i_guid = guid_set.begin(); i_guid != guid_set.end(); ++i_guid)
     {
@@ -339,5 +339,14 @@ ObjectGridStoper::Visit(CreatureMapType &m)
     }
 }
 
-template void ObjectGridUnloader::Visit(GameObjectMapType &);
+void
+ObjectGridStoper::Visit(GameObjectMapType &m)
+{
+    // remove dynobjects created at cast at grid de-activation
+    for (GameObjectMapType::iterator iter = m.begin(); iter != m.end(); ++iter)
+    {
+        iter->getSource()->RemoveAllDynObjects();
+    }
+}
+
 template void ObjectGridUnloader::Visit(DynamicObjectMapType &);

@@ -67,7 +67,7 @@ struct boss_thermapluggAI : public ScriptedAI
         m_uiKnockAwayTimer = urand(17000, 20000);
         m_uiActivateBombTimer = urand(10000, 15000);
         m_bIsPhaseTwo = false;
-        m_asBombFaces = NULL;
+        m_asBombFaces = nullptr;
 
         memset(&m_afSpawnPos, 0.0f, sizeof(m_afSpawnPos));
         m_lLandedBombGUIDs.clear();
@@ -230,7 +230,7 @@ CreatureAI* GetAI_boss_thermaplugg(Creature* pCreature)
     return new boss_thermapluggAI(pCreature);
 }
 
-bool EffectDummyCreature_spell_boss_thermaplugg(Unit* pCaster, uint32 uiSpellId, SpellEffectIndex uiEffIndex, Creature* pCreatureTarget)
+bool EffectDummyCreature_spell_boss_thermaplugg(WorldObject* /*pCaster*/, uint32 uiSpellId, SpellEffectIndex uiEffIndex, Creature* pCreatureTarget)
 {
     if ((uiSpellId != SPELL_ACTIVATE_BOMB_A && uiSpellId != SPELL_ACTIVATE_BOMB_B) || uiEffIndex != EFFECT_INDEX_0)
         return false;

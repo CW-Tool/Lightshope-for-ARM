@@ -246,7 +246,7 @@ struct GameObjectInfo
         //20 GAMEOBJECT_TYPE_AUCTIONHOUSE
         struct
         {
-            uint32 actionHouseID;                           //0
+            uint32 auctionHouseID;                          //0
         } auctionhouse;
         //21 GAMEOBJECT_TYPE_GUARDPOST
         struct
@@ -260,6 +260,9 @@ struct GameObjectInfo
             uint32 spellId;                                 //0
             uint32 charges;                                 //1
             uint32 partyOnly;                               //2
+            uint32 allowMounted;                            //3 Is usable while on mount/vehicle. (0/1)
+            uint32 large;                                   //4
+            uint32 conditionID1;                            //5
         } spellcaster;
         //23 GAMEOBJECT_TYPE_MEETINGSTONE
         struct
@@ -361,6 +364,19 @@ struct GameObjectInfo
         }
     }
 
+    bool IsUsableMounted() const
+    {
+        switch (type)
+        {
+            case GAMEOBJECT_TYPE_MAILBOX: return true;
+            case GAMEOBJECT_TYPE_QUESTGIVER: return questgiver.allowMounted != 0;
+            case GAMEOBJECT_TYPE_TEXT: return text.allowMounted != 0;
+            case GAMEOBJECT_TYPE_GOOBER: return goober.allowMounted != 0;
+            case GAMEOBJECT_TYPE_SPELLCASTER: return spellcaster.allowMounted != 0;
+            default: return false;
+        }
+    }
+
     uint32 GetLockId() const
     {
         switch(type)
@@ -391,6 +407,21 @@ struct GameObjectInfo
             case GAMEOBJECT_TYPE_FLAGSTAND:  return flagstand.noDamageImmune;
             case GAMEOBJECT_TYPE_FLAGDROP:   return flagdrop.noDamageImmune;
             default: return true;
+        }
+    }
+
+    bool CannotBeUsedUnderImmunity() const // Cannot be used/activated/looted by players under immunity effects (example: Divine Shield)
+    {
+        switch (type)
+        {
+            case GAMEOBJECT_TYPE_DOOR:       return door.noDamageImmune != 0;
+            case GAMEOBJECT_TYPE_BUTTON:     return button.noDamageImmune != 0;
+            case GAMEOBJECT_TYPE_QUESTGIVER: return questgiver.noDamageImmune != 0;
+            case GAMEOBJECT_TYPE_CHEST:      return true;                           // All chests cannot be opened while immune on 3.3.5a
+            case GAMEOBJECT_TYPE_GOOBER:     return goober.noDamageImmune != 0;
+            case GAMEOBJECT_TYPE_FLAGSTAND:  return flagstand.noDamageImmune != 0;
+            case GAMEOBJECT_TYPE_FLAGDROP:   return flagdrop.noDamageImmune != 0;
+            default: return false;
         }
     }
 
@@ -593,7 +624,7 @@ class MANGOS_DLL_SPEC GameObject : public WorldObject
         time_t GetRespawnTime() const { return m_respawnTime; }
         time_t GetRespawnTimeEx() const
         {
-            time_t now = time(NULL);
+            time_t now = time(nullptr);
             if(m_respawnTime > now)
                 return m_respawnTime;
             else
@@ -604,7 +635,7 @@ class MANGOS_DLL_SPEC GameObject : public WorldObject
         void JustDespawnedWaitingRespawn();
         void SetRespawnTime(time_t respawn)
         {
-            m_respawnTime = respawn > 0 ? time(NULL) + respawn : 0;
+            m_respawnTime = respawn > 0 ? time(nullptr) + respawn : 0;
             m_respawnDelayTime = respawn > 0 ? uint32(respawn) : 0;
         }
         void SetRespawnDelay(time_t respawn)
@@ -624,6 +655,7 @@ class MANGOS_DLL_SPEC GameObject : public WorldObject
         uint32 ComputeRespawnDelay() const; // Applies dynamic / random respawn timers if needed.
         void Refresh();
         void Delete();
+        void CleanupsBeforeDelete() override;
 
         // Functions spawn/remove gameobject with DB guid in all loaded map copies (if point grid loaded in map)
         static void AddToRemoveListInMaps(uint32 db_guid, GameObjectData const* data);
@@ -694,15 +726,13 @@ class MANGOS_DLL_SPEC GameObject : public WorldObject
                                                             // 0 = use `gameobject`.`spawntimesecs`
         void ResetDoorOrButton();
 
-        bool IsHostileTo(Unit const* unit) const;
-        bool IsFriendlyTo(Unit const* unit) const;
+        bool IsHostileTo(WorldObject const* target) const override;
+        bool IsFriendlyTo(WorldObject const* target) const override;
 
         void SummonLinkedTrapIfAny();
         void TriggerLinkedGameObject(Unit* target);
         void RespawnLinkedGameObject();
-
-        bool isVisibleForInState(Player const* u, WorldObject const* viewPoint, bool inVisibleList) const;
-
+        
         GameObject* LookupFishingHoleAround(float range);
 
         GridReference<GameObject> &GetGridRef() { return m_gridRef; }
@@ -725,12 +755,16 @@ class MANGOS_DLL_SPEC GameObject : public WorldObject
 
         // Transports system
         uint64 GetRotation() const { return m_rotation; }
-        Transport* ToTransport() { if (GetGOInfo()->type == GAMEOBJECT_TYPE_MO_TRANSPORT) return reinterpret_cast<Transport*>(this); else return NULL; }
-        Transport const* ToTransport() const { if (GetGOInfo()->type == GAMEOBJECT_TYPE_MO_TRANSPORT) return reinterpret_cast<Transport const*>(this); else return NULL; }
+        Transport* ToTransport() { if (GetGOInfo()->type == GAMEOBJECT_TYPE_MO_TRANSPORT) return reinterpret_cast<Transport*>(this); else return nullptr; }
+        Transport const* ToTransport() const { if (GetGOInfo()->type == GAMEOBJECT_TYPE_MO_TRANSPORT) return reinterpret_cast<Transport const*>(this); else return nullptr; }
 
         bool IsVisible() const { return m_visible; }
         void SetVisible(bool b);
+        bool isVisibleForInState(WorldObject const* pDetector, WorldObject const* viewPoint, bool inVisibleList) const override;
 
+        uint32 getFaction() const final override { return GetGOInfo()->faction; }
+        uint32 getLevel() const final override;
+        bool IsValidAttackTarget(Unit const* target) const final override;
     protected:
         bool        m_visible;
         uint32      m_spellId;

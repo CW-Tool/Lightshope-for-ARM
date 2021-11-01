@@ -1857,7 +1857,7 @@ struct npc_holiday_firestarterAI : ScriptedAI
                 0, 0, 0, 0,
                 1))
             {
-                pGo->UseDoorOrButton();
+                pGo->SendObjectDeSpawnAnim(pGo->GetObjectGuid());
             }
         }
     }
@@ -3233,7 +3233,7 @@ struct npc_event_fireworksAI : public ScriptedAI
 
     uint32 GetTimeUntilNextShow()
     {
-        time_t theTime = time(NULL);
+        time_t theTime = time(nullptr);
         struct tm *aTime = localtime(&theTime);
         int min = aTime->tm_min;
         int hour = aTime->tm_hour;

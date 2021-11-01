@@ -83,7 +83,7 @@ bool ChatHandler::HandleGameObjectTargetCommand(char* args)
         result = WorldDatabase.PQuery("SELECT gameobject.guid, id, position_x, position_y, position_z, orientation, map, "
                                       "(POW(position_x - %f, 2) + POW(position_y - %f, 2) + POW(position_z - %f, 2)) AS order_ FROM gameobject "
                                       "LEFT OUTER JOIN game_event_gameobject on gameobject.guid=game_event_gameobject.guid WHERE map = '%i' %s ORDER BY order_ ASC LIMIT 10",
-                                      m_session->GetPlayer()->GetPositionX(), m_session->GetPlayer()->GetPositionY(), m_session->GetPlayer()->GetPositionZ(), m_session->GetPlayer()->GetMapId(), eventFilter.str().c_str());
+                                      pl->GetPositionX(), pl->GetPositionY(), pl->GetPositionZ(), pl->GetMapId(), eventFilter.str().c_str());
     }
 
     if (!result)
@@ -135,7 +135,7 @@ bool ChatHandler::HandleGameObjectTargetCommand(char* args)
 
     if (target)
     {
-        time_t curRespawnDelay = target->GetRespawnTimeEx() - time(NULL);
+        time_t curRespawnDelay = target->GetRespawnTimeEx() - time(nullptr);
         if (curRespawnDelay < 0)
             curRespawnDelay = 0;
 
@@ -188,7 +188,7 @@ bool ChatHandler::HandleGameObjectTurnCommand(char* args)
     if (!lowguid)
         return false;
 
-    GameObject* obj = NULL;
+    GameObject* obj = nullptr;
 
     // by DB guid
     if (GameObjectData const* go_data = sObjectMgr.GetGOData(lowguid))
@@ -231,7 +231,7 @@ bool ChatHandler::HandleGameObjectMoveCommand(char* args)
     if (!lowguid)
         return false;
 
-    GameObject* obj = NULL;
+    GameObject* obj = nullptr;
 
     // by DB guid
     if (GameObjectData const* go_data = sObjectMgr.GetGOData(lowguid))
@@ -308,7 +308,7 @@ bool ChatHandler::HandleGameObjectDeleteCommand(char* args)
     if (!lowguid)
         return false;
 
-    GameObject* obj = NULL;
+    GameObject* obj = nullptr;
 
     // by DB guid
     if (GameObjectData const* go_data = sObjectMgr.GetGOData(lowguid))
@@ -433,7 +433,7 @@ bool ChatHandler::HandleGameObjectTempAddCommand(char *args)
 
     Player *chr = m_session->GetPlayer();
 
-    char* spawntime = strtok(NULL, " ");
+    char* spawntime = strtok(nullptr, " ");
     uint32 spawntm = 300;
 
     if (spawntime)
@@ -523,7 +523,7 @@ bool ChatHandler::HandleGameObjectSelectCommand(char*)
     const float dist = 10.0f;
     Player* player = m_session->GetPlayer();
 
-    GameObject* go = NULL;
+    GameObject* go = nullptr;
     CellPair pair(MaNGOS::ComputeCellPair(player->GetPositionX(), player->GetPositionY()));
     Cell cell(pair);
     cell.SetNoCreate();
@@ -577,7 +577,7 @@ bool ChatHandler::HandleGameObjectRespawnCommand(char*)
 bool ChatHandler::HandleGameObjectToggleCommand(char* args)
 {
     uint32 lowguid;
-    GameObject* obj = NULL;
+    GameObject* obj = nullptr;
 
     if (!ExtractUint32KeyFromLink(&args, "Hgameobject", lowguid))
     {
@@ -621,5 +621,77 @@ bool ChatHandler::HandleGameObjectResetCommand(char*)
         return false;
     }
     go->ResetDoorOrButton();
+    return true;
+}
+
+bool ChatHandler::HandleGameObjectSetGoStateCommand(char* args)
+{
+    // number or [name] Shift-click form |color|Hgameobject:go_id|h[name]|h|r
+    uint32 lowguid;
+    if (!ExtractUint32KeyFromLink(&args, "Hgameobject", lowguid))
+        return false;
+
+    if (!lowguid)
+        return false;
+
+    GameObject* pGameObject = nullptr;
+
+    // by DB guid
+    if (GameObjectData const* go_data = sObjectMgr.GetGOData(lowguid))
+        pGameObject = GetGameObjectWithGuid(lowguid, go_data->id);
+
+    if (!pGameObject)
+    {
+        PSendSysMessage(LANG_COMMAND_OBJNOTFOUND, lowguid);
+        SetSentErrorMessage(true);
+        return false;
+    }
+
+    uint32 uiGoState;
+    if (!ExtractUInt32(&args, uiGoState))
+        return false;
+
+    if (uiGoState > GO_STATE_ACTIVE_ALTERNATIVE)
+        return false;
+
+    pGameObject->SetGoState(GOState(uiGoState));
+    PSendSysMessage("You changed GO State of %s (GUID %u) to %u.", pGameObject->GetName(), pGameObject->GetGUIDLow(), uiGoState);
+
+    return true;
+}
+
+bool ChatHandler::HandleGameObjectSetLootStateCommand(char* args)
+{
+    // number or [name] Shift-click form |color|Hgameobject:go_id|h[name]|h|r
+    uint32 lowguid;
+    if (!ExtractUint32KeyFromLink(&args, "Hgameobject", lowguid))
+        return false;
+
+    if (!lowguid)
+        return false;
+
+    GameObject* pGameObject = nullptr;
+
+    // by DB guid
+    if (GameObjectData const* go_data = sObjectMgr.GetGOData(lowguid))
+        pGameObject = GetGameObjectWithGuid(lowguid, go_data->id);
+
+    if (!pGameObject)
+    {
+        PSendSysMessage(LANG_COMMAND_OBJNOTFOUND, lowguid);
+        SetSentErrorMessage(true);
+        return false;
+    }
+
+    uint32 uiLootState;
+    if (!ExtractUInt32(&args, uiLootState))
+        return false;
+
+    if (uiLootState > GO_JUST_DEACTIVATED)
+        return false;
+
+    pGameObject->SetLootState(LootState(uiLootState));
+    PSendSysMessage("You changed Loot State of %s (GUID %u) to %u.", pGameObject->GetName(), pGameObject->GetGUIDLow(), uiLootState);
+
     return true;
 }

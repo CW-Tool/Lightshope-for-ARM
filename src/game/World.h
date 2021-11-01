@@ -739,7 +739,7 @@ class World
         int32 GetQueuedSessionPos(WorldSession*);
 
         /// Set a new Message of the Day
-        void SetMotd(const std::string& motd) { m_motd = motd; }
+        void SetMotd(std::string const& motd) { m_motd = motd; }
         /// Get the current Message of the Day
         const char* GetMotd() const { return m_motd.c_str(); }
 
@@ -790,13 +790,13 @@ class World
         void SendGlobalMessage(WorldPacket *packet, WorldSession *self = 0, uint32 team = 0);
         void SendZoneMessage(uint32 zone, WorldPacket *packet, WorldSession *self = 0, uint32 team = 0);
         void SendZoneText(uint32 zone, const char *text, WorldSession *self = 0, uint32 team = 0);
-        void SendServerMessage(ServerMessageType type, const char *text = "", Player* player = NULL);
+        void SendServerMessage(ServerMessageType type, const char *text = "", Player* player = nullptr);
 
         /// Are we in the middle of a shutdown?
         bool IsShutdowning() const { return m_ShutdownTimer > 0; }
         void ShutdownServ(uint32 time, uint32 options, uint8 exitcode);
         void ShutdownCancel();
-        void ShutdownMsg(bool show = false, Player* player = NULL);
+        void ShutdownMsg(bool show = false, Player* player = nullptr);
         static uint8 GetExitCode() { return m_ExitCode; }
         static void StopNow(uint8 exitcode) { m_stopEvent = true; m_ExitCode = exitcode; }
         static bool IsStopped() { return m_stopEvent; }
@@ -834,7 +834,7 @@ class World
         void WarnAccount(uint32 accountId, std::string from, std::string reason, const char* type = "WARNING");
         void BanAccount(uint32 accountId, uint32 duration, std::string reason, std::string author);
         BanReturn BanAccount(BanMode mode, std::string nameOrIP, uint32 duration_secs, std::string reason, std::string author);
-        bool RemoveBanAccount(BanMode mode, const std::string& source, const std::string& message, std::string nameOrIP);
+        bool RemoveBanAccount(BanMode mode, std::string const& source, std::string const& message, std::string nameOrIP);
 
         // for max speed access
         static float GetMaxVisibleDistanceOnContinents()    { return m_MaxVisibleDistanceOnContinents; }
@@ -885,7 +885,7 @@ class World
         void LogMoneyTrade(ObjectGuid sender, ObjectGuid receiver, uint32 amount, const char* type, uint32 dataInt);
         void LogCharacter(Player* character, const char* action);
         void LogCharacter(WorldSession* sess, uint32 lowGuid, std::string const& charName, const char* action);
-        void LogChat(WorldSession* sess, const char* type, std::string const& msg, PlayerPointer target = NULL, uint32 chanId = 0, const char* chanStr = NULL);
+        void LogChat(WorldSession* sess, const char* type, std::string const& msg, PlayerPointer target = nullptr, uint32 chanId = 0, const char* chanStr = nullptr);
         void LogTransaction(PlayerTransactionData const& data);
         void Shutdown();
         void AddSessionToSessionsMap(WorldSession* sess);

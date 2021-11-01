@@ -701,7 +701,7 @@ struct npc_eris_havenfireAI : public ScriptedAI
 
                         Unit* Target = m_creature->GetMap()->GetCreature(GUIDs[urand(0, var - 1)]);
                         if (Target)
-                            Crea->CastCustomSpell(Target, SPELL_TIR_FLECHE, &Damage, NULL, NULL, true);
+                            Crea->CastCustomSpell(Target, SPELL_TIR_FLECHE, &Damage, nullptr, nullptr, true);
                         TimerArcher[i] = urand(3000, 4400);
                     }
                 }
@@ -1621,7 +1621,7 @@ struct npc_darrowshire_triggerAI : public ScriptedAI
                         {
                             PhaseStep = 5;
                             PhaseTimer = 0;
-                            marduk->DealDamage(redpath, redpath->GetHealth(), NULL, DIRECT_DAMAGE, SPELL_SCHOOL_MASK_NORMAL, NULL, false);
+                            marduk->DealDamage(redpath, redpath->GetHealth(), nullptr, DIRECT_DAMAGE, SPELL_SCHOOL_MASK_NORMAL, nullptr, false);
                             if (Creature* redpathCorrupted = m_creature->SummonCreature(NPC_REDPATH_THE_CORRUPTED, redpath->GetPositionX(), redpath->GetPositionY(), redpath->GetPositionZ(), 0.0f, TEMPSUMMON_TIMED_OR_DEAD_DESPAWN, 120000))
                             {
                                 DoScriptText(SAY_REDPATH_CORRUPTED, redpathCorrupted);
@@ -1845,19 +1845,22 @@ enum
     SPELL_PLACING_SMOKEY_S_EXPLOSIVES       = 19250,
     TRIGGER_SCOURGE_STRUCTURE = 12247
 };
-bool EffectDummyGameObj_go_mark_of_detonation(Unit* pCaster, uint32 uiSpellId, SpellEffectIndex effIndex, GameObject* pGameObjectTarget)
+bool EffectDummyGameObj_go_mark_of_detonation(WorldObject* pCaster, uint32 uiSpellId, SpellEffectIndex effIndex, GameObject* pGameObjectTarget)
 {
     //always check spellid and effectindex
-    if (uiSpellId == SPELL_PLACING_SMOKEY_S_EXPLOSIVES && effIndex == EFFECT_INDEX_0 && pCaster->GetTypeId() == TYPEID_PLAYER)
+    if (uiSpellId == SPELL_PLACING_SMOKEY_S_EXPLOSIVES && effIndex == EFFECT_INDEX_0)
     {
-        if (Creature* pCreature = pGameObjectTarget->FindNearestCreature(TRIGGER_SCOURGE_STRUCTURE, 8.000000, true))
+        if (Player* pPlayer = pCaster->ToPlayer())
         {
-            pCaster->ToPlayer()->KilledMonsterCredit(pCreature->GetEntry(), pCreature->GetObjectGuid());
-            pCreature->DealDamage(pCreature, pCreature->GetHealth(), NULL, DIRECT_DAMAGE, SPELL_SCHOOL_MASK_NORMAL, NULL, false);
+            if (Creature* pCreature = pGameObjectTarget->FindNearestCreature(TRIGGER_SCOURGE_STRUCTURE, 8.000000, true))
+            {
+                pPlayer->KilledMonsterCredit(pCreature->GetEntry(), pCreature->GetObjectGuid());
+                pCreature->DealDamage(pCreature, pCreature->GetHealth(), nullptr, DIRECT_DAMAGE, SPELL_SCHOOL_MASK_NORMAL, nullptr, false);
+            }
+            //always return true when we are handling this spell and effect
+            pGameObjectTarget->Despawn();
+            return true;
         }
-        //always return true when we are handling this spell and effect
-        pGameObjectTarget->Despawn();
-        return true;
     }
     return false;
 }

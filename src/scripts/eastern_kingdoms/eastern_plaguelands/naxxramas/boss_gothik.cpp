@@ -305,13 +305,13 @@ struct boss_gothikAI : public ScriptedAI
         switch (pSummoned->GetEntry())
         {
         case NPC_UNREL_TRAINEE:
-            pTempTrigger->CastSpell(pAnchor, SPELL_A_TO_ANCHOR_1, true, NULL, NULL, pSummoned->GetGUID());
+            pTempTrigger->CastSpell(pAnchor, SPELL_A_TO_ANCHOR_1, true, nullptr, nullptr, pSummoned->GetGUID());
             break;
         case NPC_UNREL_DEATH_KNIGHT:
-            pTempTrigger->CastSpell(pAnchor, SPELL_B_TO_ANCHOR_1, true, NULL, NULL, pSummoned->GetGUID());
+            pTempTrigger->CastSpell(pAnchor, SPELL_B_TO_ANCHOR_1, true, nullptr, nullptr, pSummoned->GetGUID());
             break;
         case NPC_UNREL_RIDER:
-            pTempTrigger->CastSpell(pAnchor, SPELL_C_TO_ANCHOR_1, true, NULL, NULL, pSummoned->GetGUID());
+            pTempTrigger->CastSpell(pAnchor, SPELL_C_TO_ANCHOR_1, true, nullptr, nullptr, pSummoned->GetGUID());
             break;
         }
     }
@@ -596,7 +596,7 @@ CreatureAI* GetAI_boss_gothik(Creature* pCreature)
     return new boss_gothikAI(pCreature);
 }
 
-bool EffectDummyCreature_spell_anchor(Unit* pCaster, uint32 uiSpellId, SpellEffectIndex uiEffIndex, Creature* pCreatureTarget)
+bool EffectDummyCreature_spell_anchor(WorldObject* /*pCaster*/, uint32 uiSpellId, SpellEffectIndex uiEffIndex, Creature* pCreatureTarget)
 {
     if (uiEffIndex != EFFECT_INDEX_0 || pCreatureTarget->GetEntry() != NPC_SUB_BOSS_TRIGGER)
         return true;

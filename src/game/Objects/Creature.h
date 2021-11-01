@@ -69,6 +69,7 @@ enum CreatureFlagsExtra
     CREATURE_FLAG_EXTRA_NO_TARGET                    = 0x00020000,       // creature does not acquire targets
     CREATURE_FLAG_EXTRA_ONLY_VISIBLE_TO_FRIENDLY     = 0x00040000,       // creature can only be seen by friendly units
     CREATURE_FLAG_EXTRA_PVP                          = 0x00080000,       // creature has pvp unit flag set by default
+    CREATURE_FLAG_EXTRA_CAN_ASSIST                   = 0x00100000,       // CREATURE_TYPEFLAGS_CAN_ASSIST from TBC
 };
 
 // GCC have alternative #pragma pack(N) syntax and old gcc version not support pack(push,N), also any gcc version not support it at some platform
@@ -167,16 +168,6 @@ struct CreatureInfo
 
     ObjectGuid GetObjectGuid(uint32 lowguid) const { return ObjectGuid(GetHighGuid(), entry, lowguid); }
 
-    SkillType GetRequiredLootSkill() const
-    {
-        if(type_flags & CREATURE_TYPEFLAGS_HERBLOOT)
-            return SKILL_HERBALISM;
-        if(type_flags & CREATURE_TYPEFLAGS_MININGLOOT)
-            return SKILL_MINING;
-        return SKILL_SKINNING;
-        // normal case
-    }
-
     bool isTameable() const
     {
         return type == CREATURE_TYPE_BEAST && beast_family != 0 && type_flags & CREATURE_TYPEFLAGS_TAMEABLE;
@@ -189,32 +180,56 @@ struct EquipmentInfo
     uint32  equipentry[3];
 };
 
+#define MAX_SPAWN_ID 4
+
 // from `creature` table
 struct CreatureData
 {
-    uint32 id;                                              // entry in creature_template
-    uint16 mapid;
-    uint32 modelid_override;                                // overrides any model defined in creature_template
-    int32 equipmentId;
-    float posX;
-    float posY;
-    float posZ;
-    float orientation;
-    uint32 spawntimesecsmin;
-    uint32 spawntimesecsmax;
-    float spawndist;
-    uint32 currentwaypoint;
-    uint32 curhealth;
-    uint32 curmana;
-    bool  is_dead;
-    uint8 movementType;
-    uint32 spawnFlags;
-    float visibilityModifier;
+    std::array<uint32, MAX_SPAWN_ID> creature_id = {};
+    uint16 mapid = 0;
+    uint32 modelid_override = 0;
+    int32 equipmentId = 0;
+    float posX = 0.0f;
+    float posY = 0.0f;
+    float posZ = 0.0f;
+    float orientation = 0.0f;
+    uint32 spawntimesecsmin = 0;
+    uint32 spawntimesecsmax = 0;
+    float spawndist = 0.0f;
+    uint32 currentwaypoint = 0;
+    float curhealth = 100.0f;
+    float curmana = 100.0f;
+    bool  is_dead = false;
+    uint8 movementType = 0;
+    uint32 spawnFlags = 0;
+    float visibilityModifier = 0.0f;
 
+    // non db field
     uint32 instanciatedContinentInstanceId;
+
     // helper function
-    ObjectGuid GetObjectGuid(uint32 lowguid) const { return ObjectGuid(CreatureInfo::GetHighGuid(), id, lowguid); }
+    ObjectGuid GetObjectGuid(uint32 lowguid) const { return ObjectGuid(CreatureInfo::GetHighGuid(), creature_id[0], lowguid); }
     uint32 GetRandomRespawnTime() const { return urand(spawntimesecsmin, spawntimesecsmax); }
+    uint32 ChooseCreatureId() const
+    {
+        uint32 creatureId = 0;
+        uint32 creatureIdCount = 0;
+        for (; creatureIdCount < MAX_SPAWN_ID && creature_id[creatureIdCount]; ++creatureIdCount);
+
+        if (creatureIdCount)
+            creatureId = creature_id[urand(0, creatureIdCount - 1)];
+
+        if (!creatureId)
+            creatureId = 1;
+
+        return creatureId;
+    }
+    uint32 GetCreatureIdCount() const
+    {
+        uint32 creatureIdCount = 0;
+        for (; creatureIdCount < MAX_SPAWN_ID && creature_id[creatureIdCount]; ++creatureIdCount);
+        return creatureIdCount;
+    }
 };
 
 // from `creature_addon` and `creature_template_addon`tables
@@ -486,7 +501,7 @@ class MANGOS_DLL_SPEC Creature : public Unit
         void AddToWorld() override;
         void RemoveFromWorld() override;
 
-        bool Create(uint32 guidlow, CreatureCreatePos& cPos, CreatureInfo const* cinfo, Team team = TEAM_NONE, const CreatureData *data = nullptr, GameEventCreatureData const* eventData = nullptr);
+        bool Create(uint32 guidlow, CreatureCreatePos& cPos, CreatureInfo const* cinfo, Team team, uint32 firstCreatureId, const CreatureData *data = nullptr, GameEventCreatureData const* eventData = nullptr);
         bool LoadCreatureAddon(bool reload = false);
         void UnloadCreatureAddon(const CreatureDataAddon* data);
 
@@ -508,7 +523,6 @@ class MANGOS_DLL_SPEC Creature : public Unit
 
         bool HasStaticDBSpawnData() const;                  // listed in `creature` table and have fixed in DB guid
         uint32 GetDBTableGUIDLow() const;
-        uint32 GetDBTableEntry() const;
 
         char const* GetSubName() const { return GetCreatureInfo()->subname; }
 
@@ -537,6 +551,7 @@ class MANGOS_DLL_SPEC Creature : public Unit
         bool IsCivilian() const { return GetCreatureInfo()->civilian; }
         bool IsTrigger() const { return GetCreatureInfo()->flags_extra & CREATURE_FLAG_EXTRA_INVISIBLE; }
         bool IsGuard() const { return GetCreatureInfo()->flags_extra & CREATURE_FLAG_EXTRA_GUARD; }
+        bool HasTypeFlag(CreatureTypeFlags flag) const { return GetCreatureInfo()->type_flags & flag; }
 
         // World of Warcraft Client Patch 1.10.0 (2006-03-28)
         // - Area effect spells and abilities will no longer consider totems as
@@ -589,8 +604,6 @@ class MANGOS_DLL_SPEC Creature : public Unit
 
             return GetCreatureInfo()->rank == CREATURE_ELITE_WORLDBOSS;
         }
-
-        uint32 GetLevelForTarget(Unit const* target) const override; // overwrite Unit::GetLevelForTarget for boss level support
 
         bool IsInEvadeMode() const;
 
@@ -708,7 +721,7 @@ class MANGOS_DLL_SPEC Creature : public Unit
         Cell const& GetCurrentCell() const { return m_currentCell; }
         void SetCurrentCell(Cell const& cell) { m_currentCell = cell; }
 
-        bool IsVisibleInGridForPlayer(Player* pl) const override;
+        bool IsVisibleInGridForPlayer(Player const* pl) const override;
 
         void RemoveCorpse();
         bool IsDeadByDefault() const { return m_isDeadByDefault; };
@@ -757,7 +770,7 @@ class MANGOS_DLL_SPEC Creature : public Unit
         Unit* SelectAttackingTarget(AttackingTarget target, uint32 position, SpellEntry const* pSpellInfo = nullptr, uint32 selectFlags = SELECT_FLAG_NO_TOTEM) const;
 
         // AI helpers
-        Unit* SelectNearestHostileUnitInAggroRange(bool useLOS) const;
+        Unit* SelectNearestHostileUnitInAggroRange(bool useLOS, bool ignoreCivilians = false) const;
         Unit* SelectNearestTargetInAttackDistance(float dist) const;
         Creature* FindNearestFriendlyGuard(float range) const;
         void CallNearestGuard(Unit* pEnemy) const;
@@ -834,7 +847,7 @@ class MANGOS_DLL_SPEC Creature : public Unit
 
         void SetDeadByDefault (bool death_state) { m_isDeadByDefault = death_state; }
 
-        void SetNoXP() { SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_NO_KILL_REWARD); }
+        void SetNoXP() { addUnitState(UNIT_STAT_NO_KILL_REWARD); }
 
         void SetFactionTemporary(uint32 factionId, uint32 tempFactionFlags = TEMPFACTION_ALL);
         void ClearTemporaryFaction();
@@ -915,13 +928,15 @@ class MANGOS_DLL_SPEC Creature : public Unit
 
         void SetEscortable(bool escortable) { _isEscortable = escortable; }
         bool IsEscortable() const { return _isEscortable; }
+        bool CanAssistPlayers() { return GetCreatureInfo()->flags_extra & CREATURE_FLAG_EXTRA_CAN_ASSIST; }
 
         bool CanSummonGuards() { return GetCreatureInfo()->flags_extra & CREATURE_FLAG_EXTRA_SUMMON_GUARD; }
+        uint32 GetOriginalEntry() const { return m_originalEntry; }
 
     protected:
         bool MeetsSelectAttackingRequirement(Unit* pTarget, SpellEntry const* pSpellInfo, uint32 selectFlags) const;
 
-        bool CreateFromProto(uint32 guidlow, CreatureInfo const* cinfo, Team team, const CreatureData *data = nullptr, GameEventCreatureData const* eventData = nullptr);
+        bool CreateFromProto(uint32 guidlow, CreatureInfo const* cinfo, Team team, uint32 firstCreatureId, const CreatureData *data = nullptr, GameEventCreatureData const* eventData = nullptr);
         bool InitEntry(uint32 entry, Team team=ALLIANCE, const CreatureData* data = nullptr, GameEventCreatureData const* eventData = nullptr);
 
         uint32 m_groupLootTimer;                            // (msecs)timer used for group loot

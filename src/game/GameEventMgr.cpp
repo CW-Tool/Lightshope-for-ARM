@@ -593,7 +593,6 @@ void GameEventMgr::LoadFromDB()
 
     mGameEventMails.resize(mGameEvent.size() * 2 - 1);
 
-#if SUPPORTED_CLIENT_BUILD > CLIENT_BUILD_1_9_4
     result = WorldDatabase.Query("SELECT event, raceMask, quest, mailTemplateId, senderEntry FROM game_event_mail");
 
     count = 0;
@@ -648,7 +647,7 @@ void GameEventMgr::LoadFromDB()
                 continue;
             }
 
-            if (!sMailTemplateStore.LookupEntry(mail.mailTemplateId))
+            if (!sMailTemplateStorage.LookupEntry<MailTemplateEntry>(mail.mailTemplateId))
             {
                 sLog.outErrorDb("Table `game_event_mail` have invalid mailTemplateId (%u) for game event %i that invalid not include any player races, ignoring.", mail.mailTemplateId, event_id);
                 continue;
@@ -672,7 +671,6 @@ void GameEventMgr::LoadFromDB()
         sLog.outString();
         sLog.outString(">> Loaded %u start/end game event mails", count);
     }
-#endif
 }
 
 uint32 GameEventMgr::Initialize()                           // return the next event delay in ms
@@ -711,7 +709,7 @@ void GameEventMgr::Initialize(MapPersistentState* state)
 }
 
 // return the next event delay in ms
-uint32 GameEventMgr::Update(ActiveEvents const* activeAtShutdown /*= NULL*/)
+uint32 GameEventMgr::Update(ActiveEvents const* activeAtShutdown /*= nullptr*/)
 {
     // process hardcoded events
     time_t currenttime = time(nullptr);
@@ -997,9 +995,9 @@ struct GameEventUpdateCreatureDataInMapsWorker
     {
         if (Creature* pCreature = map->GetCreature(i_guid))
         {
-            pCreature->UpdateEntry(i_data->id, TEAM_NONE, i_data, i_activate ? i_event_data : NULL);
+            pCreature->UpdateEntry(pCreature->GetOriginalEntry(), TEAM_NONE, i_data, i_activate ? i_event_data : nullptr);
 
-            // spells not casted for event remove case (sent NULL into update), do it
+            // spells not casted for event remove case (sent nullptr into update), do it
             if (!i_activate)
                 pCreature->ApplyGameEventSpells(i_event_data, false);
         }

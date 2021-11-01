@@ -417,7 +417,7 @@ struct LockEntry
 struct MailTemplateEntry
 {
     uint32      ID;                                         // 0        m_ID
-    //char*       subject[8];                               // 1-8      m_subject_lang
+    char*       subject[8];                                 // 1-8      m_subject_lang
                                                             // 9 string flags
 };
 
@@ -725,7 +725,7 @@ typedef std::map<uint32,TaxiPathSetForSource> TaxiPathSetBySource;
 
 struct TaxiPathNodePtr
 {
-    TaxiPathNodePtr() : i_ptr(NULL) {}
+    TaxiPathNodePtr() : i_ptr(nullptr) {}
     TaxiPathNodePtr(TaxiPathNodeEntry const* ptr) : i_ptr(ptr) {}
 
     TaxiPathNodeEntry const* i_ptr;

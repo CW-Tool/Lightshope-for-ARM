@@ -105,12 +105,27 @@ struct boss_marliAI : public ScriptedAI
             sLog.outDebug("boss_marli, no Eggs with the entry %u were found", GO_EGG);
         else
         {
-            for (std::list<GameObject*>::iterator iter = lSpiderEggs.begin(); iter != lSpiderEggs.end(); ++iter)
+            for (const auto& pGo : lSpiderEggs)
             {
-                if ((*iter)->GetGoState() == GO_STATE_ACTIVE)
-                    (*iter)->SetGoState(GO_STATE_READY);
+                if (pGo->GetGoState() == GO_STATE_ACTIVE)
+                    pGo->SetGoState(GO_STATE_READY);
             }
         }
+
+        // World of Warcraft Client Patch 1.8.0 (2005-10-11)
+        // - High Priestess Mar'li will now despawn her summoned spiders when 
+        //   she returns from combat.
+        if (sWorld.GetWowPatch() >= WOW_PATCH_108)
+        {
+            std::list<Creature*> lSummonedSpiders;
+            GetCreatureListWithEntryInGrid(lSummonedSpiders, m_creature, NPC_SPAWN_OF_MARLI, DEFAULT_VISIBILITY_INSTANCE);
+            for (const auto& pSpider : lSummonedSpiders)
+            {
+                if (pSpider->IsTemporarySummon())
+                    static_cast<TemporarySummon*>(pSpider)->UnSummon();
+            }
+        }
+
         // Annule les changements de buffs de transition de phases.
         m_creature->ResetStats();
     }
@@ -156,7 +171,7 @@ struct boss_marliAI : public ScriptedAI
                     return (*iter);
             }
         }
-        return NULL;
+        return nullptr;
     }
 
     void JustSummoned(Creature* pSummoned)
@@ -266,7 +281,7 @@ struct boss_marliAI : public ScriptedAI
                     m_bHasWebbed = false;
                     /*
                         DoResetThreat();
-                        Unit* pTarget = NULL;
+                        Unit* pTarget = nullptr;
                         uint8 i = 0 ;
                         while (i < 5)                               // max 3 tries to get a random target with power_mana
                         {

@@ -648,8 +648,26 @@ void ScriptMgr::LoadScripts(ScriptMapMap& scripts, const char* tablename)
             {
                 if (tmp.faction.factionId && !sObjectMgr.GetFactionTemplateEntry(tmp.faction.factionId))
                 {
-                    sLog.outErrorDb("Table `%s` has datalong2 = %u in SCRIPT_COMMAND_SET_FACTION for script id %u, but this faction does not exist.", tablename, tmp.faction.factionId, tmp.id);
-                    continue;
+                    switch (tmp.faction.factionId)
+                    {
+                        // Hacky fix for the Theramore Duel Event before 1.10, so we don't
+                        // have to add a build column to script tables just for this case.
+                        // Blizzard added new factions for the duelists, because the Red
+                        // team was using a generic hostile faction previously, and would
+                        // regularly aggro unsuspecting alliance players who passed nearby.
+                        // See the wowhead comments on Gaurd Jarad, Guard Tark, Guard Lana.
+                        case 1621: // Blue (added 1.10)
+                            tmp.faction.factionId = 150; // Theramore (same on all patches)
+                            break;
+                        case 1622: // Red (added 1.10)
+                            tmp.faction.factionId = 168; // Enemy (same on all patches)
+                            break;
+                        default:
+                        {
+                            sLog.outErrorDb("Table `%s` has datalong2 = %u in SCRIPT_COMMAND_SET_FACTION for script id %u, but this faction does not exist.", tablename, tmp.faction.factionId, tmp.id);
+                            continue;
+                        }
+                    }
                 }
 
                 break;
@@ -1202,6 +1220,16 @@ void ScriptMgr::LoadScripts(ScriptMapMap& scripts, const char* tablename)
                 {
                     sLog.outErrorDb("Table `%s` using unknown option in datalong (%u) in SCRIPT_COMMAND_JOIN_CREATURE_GROUP for script id %u",
                         tablename, tmp.joinCreatureGroup.options, tmp.id);
+                    continue;
+                }
+                break;
+            }
+            case SCRIPT_COMMAND_SET_GO_STATE:
+            {
+                if (tmp.setGoState.state > GO_STATE_ACTIVE_ALTERNATIVE)
+                {
+                    sLog.outErrorDb("Table `%s` using invalid go state in datalong (%u) in SCRIPT_COMMAND_SET_GO_STATE for script id %u",
+                        tablename, tmp.setGoState.state, tmp.id);
                     continue;
                 }
                 break;
@@ -1827,7 +1855,7 @@ bool ScriptMgr::OnProcessEvent(uint32 eventId, Object* pSource, Object* pTarget,
     return pTempScript->pProcessEventId(eventId, pSource, pTarget, isStart);
 }
 
-bool ScriptMgr::OnEffectDummy(Unit* pCaster, uint32 spellId, SpellEffectIndex effIndex, Creature* pTarget)
+bool ScriptMgr::OnEffectDummy(WorldObject* pCaster, uint32 spellId, SpellEffectIndex effIndex, Creature* pTarget)
 {
     Script* pTempScript = m_scripts[pTarget->GetScriptId()];
 
@@ -1837,7 +1865,7 @@ bool ScriptMgr::OnEffectDummy(Unit* pCaster, uint32 spellId, SpellEffectIndex ef
     return pTempScript->pEffectDummyCreature(pCaster, spellId, effIndex, pTarget);
 }
 
-bool ScriptMgr::OnEffectDummy(Unit* pCaster, uint32 spellId, SpellEffectIndex effIndex, GameObject* pTarget)
+bool ScriptMgr::OnEffectDummy(WorldObject* pCaster, uint32 spellId, SpellEffectIndex effIndex, GameObject* pTarget)
 {
     Script* pTempScript = m_scripts[pTarget->GetGOInfo()->ScriptId];
 

@@ -165,7 +165,7 @@ struct InstanceGroupBind
     bool perm;
     /* permanent InstanceGroupBinds exist iff the leader has a permanent
        PlayerInstanceBind for the same instance. */
-    InstanceGroupBind() : state(NULL), perm(false) {}
+    InstanceGroupBind() : state(nullptr), perm(false) {}
 };
 
 /** request member stats checken **/
@@ -215,7 +215,7 @@ class MANGOS_DLL_SPEC Group
         uint32 GetId() const { return m_Id; }
         bool IsFull() const { return (m_groupType==GROUPTYPE_NORMAL) ? (m_memberSlots.size()>=MAX_GROUP_SIZE) : (m_memberSlots.size()>=MAX_RAID_SIZE); }
         bool isRaidGroup() const { return m_groupType==GROUPTYPE_RAID; }
-        bool isBGGroup()   const { return m_bgGroup != NULL; }
+        bool isBGGroup()   const { return m_bgGroup != nullptr; }
         bool IsCreated()   const { return GetMembersCount() > 0; }
         ObjectGuid GetLeaderGuid() const { return m_leaderGuid; }
         const char * GetLeaderName() const { return m_leaderName.c_str(); }
@@ -226,7 +226,7 @@ class MANGOS_DLL_SPEC Group
         // member manipulation methods
         bool IsMember(ObjectGuid guid) const { return _getMemberCSlot(guid) != m_memberSlots.end(); }
         bool IsLeader(ObjectGuid guid) const { return GetLeaderGuid() == guid; }
-        ObjectGuid GetMemberGuid(const std::string& name)
+        ObjectGuid GetMemberGuid(std::string const& name)
         {
             for(member_citerator itr = m_memberSlots.begin(); itr != m_memberSlots.end(); ++itr)
                 if (itr->name == name)
@@ -243,7 +243,7 @@ class MANGOS_DLL_SPEC Group
             return mslot->assistant;
         }
         Player* GetInvited(ObjectGuid guid) const;
-        Player* GetInvited(const std::string& name) const;
+        Player* GetInvited(std::string const& name) const;
 
         bool HasFreeSlotSubGroup(uint8 subgroup) const
         {
@@ -256,7 +256,7 @@ class MANGOS_DLL_SPEC Group
         GroupReference* GetFirstMember() { return m_memberMgr.getFirst(); }
         uint32 GetMembersCount() const { return m_memberSlots.size(); }
         uint32 GetMembersMinCount() const { return (isBGGroup() ? 1 : 2); }
-        void GetDataForXPAtKill(Unit const* victim, uint32& count,uint32& sum_level, Player* & member_with_max_level, Player* & not_gray_member_with_max_level, Player* additional = NULL);
+        void GetDataForXPAtKill(Unit const* victim, uint32& count,uint32& sum_level, Player* & member_with_max_level, Player* & not_gray_member_with_max_level, Player* additional = nullptr);
         uint8 GetMemberGroup(ObjectGuid guid) const
         {
             member_citerator mslot = _getMemberCSlot(guid);
